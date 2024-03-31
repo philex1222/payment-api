@@ -2,16 +2,18 @@ package com.example.paymentapi.controller;
 
 import com.example.paymentapi.dto.PaymentRequest;
 import com.example.paymentapi.dto.PaymentResponse;
+import com.example.paymentapi.dto.PaymentStatusRequest;
 import com.example.paymentapi.model.Payment;
 import com.example.paymentapi.service.PaymentService;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import javax.validation.Valid;
 import java.util.List;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/api/payments")
@@ -37,6 +39,13 @@ public class PaymentController {
         return ResponseEntity.ok(paymentResponse);
     }
 
+    @GetMapping
+    @ApiOperation(value = "Get all payments", response = Payment.class, responseContainer = "List")
+    public ResponseEntity<Page<Payment>> getPayments(Pageable pageable) {
+        Page<Payment> payments = paymentService.getPayments(pageable);
+        return ResponseEntity.ok(payments);
+    }
+
     @GetMapping("/source-account")
     @ApiOperation(value = "Get payments by source account", response = Payment.class, responseContainer = "List")
     public ResponseEntity<List<Payment>> getPaymentsBySourceAccount(@RequestParam String sourceAccount) {
@@ -53,11 +62,15 @@ public class PaymentController {
 
     @PatchMapping("/{id}/status")
     @ApiOperation(value = "Update payment status", response = PaymentResponse.class)
-    public ResponseEntity<PaymentResponse> updatePaymentStatus(@PathVariable String id, @RequestBody Map<String, String> request) {
-        String status = request.get("status");
-        PaymentResponse paymentResponse = paymentService.updatePaymentStatus(id, status);
+    public ResponseEntity<PaymentResponse> updatePaymentStatus(@PathVariable String id, @RequestBody PaymentStatusRequest request) {
+        PaymentResponse paymentResponse = paymentService.updatePaymentStatus(id, request.getStatus());
         return ResponseEntity.ok(paymentResponse);
     }
 
-    // Other API endpoints...
+    @DeleteMapping("/{id}")
+    @ApiOperation(value = "Delete a payment", response = Void.class)
+    public ResponseEntity<Void> deletePayment(@PathVariable String id) {
+        paymentService.deletePayment(id);
+        return ResponseEntity.noContent().build();
+    }
 }

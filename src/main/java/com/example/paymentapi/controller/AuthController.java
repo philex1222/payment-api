@@ -1,6 +1,7 @@
 package com.example.paymentapi.controller;
 
 import com.example.paymentapi.dto.LoginRequest;
+import com.example.paymentapi.dto.LoginResponse;
 import com.example.paymentapi.security.JwtTokenProvider;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -23,11 +24,11 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public ResponseEntity<String> login(@RequestBody LoginRequest loginRequest) {
+    public ResponseEntity<LoginResponse> login(@RequestBody LoginRequest loginRequest) {
         Authentication authentication = authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(loginRequest.getUsername(), loginRequest.getPassword())
         );
         String token = jwtTokenProvider.generateToken(authentication);
-        return ResponseEntity.ok(token);
+        return ResponseEntity.ok(new LoginResponse(token));
     }
 }

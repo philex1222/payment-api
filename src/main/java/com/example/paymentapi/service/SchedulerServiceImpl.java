@@ -6,11 +6,10 @@ import org.springframework.stereotype.Service;
 public class SchedulerServiceImpl implements SchedulerService {
     @Override
     public void performDailyMaintenance() {
-        // Implement daily maintenance tasks
+// Implement daily maintenance tasks
         System.out.println("Performing daily maintenance tasks...");
-        // Add your specific maintenance logic here
+// Add your specific maintenance logic here
     }
-
     @Override
     public void generateHourlyReport() {
         // Implement hourly report generation

@@ -91,10 +91,9 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     @Override
-    public Page<Payment> getPayments(Pageable pageable) {
+    public Page<Payment>getPayments(Pageable pageable) {
         return paymentRepository.findAll(pageable);
     }
-
     @Override
     public List<Payment> getPaymentsBySourceAccount(String sourceAccount) {
         return paymentRepository.findBySourceAccount(sourceAccount);
@@ -116,12 +115,22 @@ public class PaymentServiceImpl implements PaymentService {
         // Log the payment status update event
         auditService.logPaymentEvent(payment.getId(), "PAYMENT_STATUS_UPDATED");
 
-        // Create and return the PaymentResponse
         PaymentResponse paymentResponse = new PaymentResponse();
         paymentResponse.setId(updatedPayment.getId());
         paymentResponse.setStatus(updatedPayment.getStatus());
         paymentResponse.setCreatedAt(updatedPayment.getCreatedAt());
 
         return paymentResponse;
+    }
+
+    @Override
+    public void deletePayment(String id) {
+        Payment payment = paymentRepository.findById(id)
+                .orElseThrow(() -> new PaymentNotFoundException("Payment not found with ID: " + id));
+
+        paymentRepository.delete(payment);
+
+        // Log the payment deletion event
+        auditService.logPaymentEvent(payment.getId(), "PAYMENT_DELETED");
     }
 }

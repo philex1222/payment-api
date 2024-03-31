@@ -17,4 +17,5 @@ public interface PaymentService {
     List<Payment> getPaymentsBySourceAccount(String sourceAccount);
     List<Payment> getPaymentsByDestinationAccount(String destinationAccount);
     PaymentResponse updatePaymentStatus(String id, String status);
+    void deletePayment(String id);
 }
