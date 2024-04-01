@@ -1,7 +1,9 @@
+// PaymentService.java
 package com.example.paymentapi.service;
 
 import com.example.paymentapi.dto.PaymentRequest;
 import com.example.paymentapi.dto.PaymentResponse;
+import com.example.paymentapi.dto.ReversalRequest;
 import com.example.paymentapi.exception.InsufficientFundsException;
 import com.example.paymentapi.exception.InvalidAccountException;
 import com.example.paymentapi.model.Payment;
@@ -18,4 +20,5 @@ public interface PaymentService {
     List<Payment> getPaymentsByDestinationAccount(String destinationAccount);
     PaymentResponse updatePaymentStatus(String id, String status);
     void deletePayment(String id);
+    PaymentResponse initiatePaymentReversal(String id, ReversalRequest reversalRequest);
 }
