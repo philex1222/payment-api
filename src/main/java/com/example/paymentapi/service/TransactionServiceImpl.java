@@ -4,8 +4,10 @@ import com.example.paymentapi.exception.TransactionNotFoundException;
 import com.example.paymentapi.model.Transaction;
 import com.example.paymentapi.repository.TransactionRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
+@Transactional
 public class TransactionServiceImpl implements TransactionService {
     private final TransactionRepository transactionRepository;
     public TransactionServiceImpl(TransactionRepository transactionRepository) {
@@ -21,6 +23,7 @@ public class TransactionServiceImpl implements TransactionService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public Transaction getTransactionById(String transactionId) throws TransactionNotFoundException {
         return transactionRepository.findById(transactionId)
                 .orElseThrow(() -> new TransactionNotFoundException("Transaction not found with ID: " + transactionId));

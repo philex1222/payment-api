@@ -11,11 +11,18 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
+@Table(name = "audit_logs")
 public class AuditLog {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    @Column(name = "payment_id", nullable = false)
     private String paymentId;
+
+    @Column(nullable = false, length = 500)
     private String event;
+
+    @Column(nullable = false)
     private LocalDateTime timestamp;
 }

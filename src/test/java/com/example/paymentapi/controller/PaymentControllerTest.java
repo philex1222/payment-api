@@ -1,6 +1,8 @@
 package com.example.paymentapi.controller;
 
+import com.example.paymentapi.config.TestConfig;
 import com.example.paymentapi.dto.LoginRequest;
+import com.example.paymentapi.dto.LoginResponse;
 import com.example.paymentapi.dto.PaymentRequest;
 import com.example.paymentapi.dto.PaymentResponse;
 import com.example.paymentapi.service.PaymentService;
@@ -11,28 +13,31 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
-import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest
 @AutoConfigureMockMvc
+@ActiveProfiles("test")
+@Import(TestConfig.class)
 public class PaymentControllerTest {
     @Autowired
     private MockMvc mockMvc;
+
     @MockBean
     private PaymentService paymentService;
-
-    @Autowired
-    private AuthenticationManager authenticationManager;
 
     @Autowired
     private ObjectMapper objectMapper;
@@ -45,13 +50,14 @@ public class PaymentControllerTest {
         loginRequest.setUsername("admin");
         loginRequest.setPassword("password");
 
-        String loginResponse = mockMvc.perform(post("/api/auth/login")
+        String loginResponseJson = mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(loginRequest)))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
 
-        token = "Bearer " + loginResponse;
+        LoginResponse loginResponse = objectMapper.readValue(loginResponseJson, LoginResponse.class);
+        token = "Bearer " + loginResponse.getToken();
     }
 
     @Test
@@ -65,6 +71,7 @@ public class PaymentControllerTest {
         PaymentResponse paymentResponse = new PaymentResponse();
         paymentResponse.setId("payment123");
         paymentResponse.setStatus("PENDING");
+        paymentResponse.setCreatedAt(LocalDateTime.now());
 
         when(paymentService.createPayment(any(PaymentRequest.class))).thenReturn(paymentResponse);
 
@@ -77,5 +84,31 @@ public class PaymentControllerTest {
                 .andExpect(jsonPath("$.status").value("PENDING"));
     }
 
-// Other test methods...
+    @Test
+    public void testGetPaymentById() throws Exception {
+        PaymentResponse paymentResponse = new PaymentResponse();
+        paymentResponse.setId("payment123");
+        paymentResponse.setStatus("COMPLETED");
+        paymentResponse.setCreatedAt(LocalDateTime.now());
+
+        when(paymentService.getPaymentById("payment123")).thenReturn(paymentResponse);
+
+        mockMvc.perform(get("/api/payments/payment123")
+                        .header("Authorization", token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value("payment123"))
+                .andExpect(jsonPath("$.status").value("COMPLETED"));
+    }
+
+    @Test
+    public void testCreatePayment_ValidationError() throws Exception {
+        PaymentRequest paymentRequest = new PaymentRequest();
+        // Missing required fields
+
+        mockMvc.perform(post("/api/payments")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", token)
+                        .content(objectMapper.writeValueAsString(paymentRequest)))
+                .andExpect(status().isBadRequest());
+    }
 }
