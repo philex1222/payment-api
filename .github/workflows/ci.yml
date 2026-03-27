@@ -56,7 +56,7 @@ jobs:
               -Dspring.profiles.active=test
 
       - name: Publish JUnit test results as Check Run
-        uses: dorny/test-reporter@v1
+        uses: dorny/test-reporter@v3
         if: always()           # Run even if tests fail so results are always published
         with:
           name: "Test Results"
