@@ -1,5 +1,7 @@
 package com.example.paymentapi.service;
 
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import io.github.resilience4j.retry.annotation.Retry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -9,23 +11,23 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Implementation of BankingAPIService.
- * This is a simulated implementation for development/testing purposes.
- * In production, this would integrate with actual banking APIs.
+ * Simulated banking API service for development and testing.
+ * In production this would delegate to an external banking integration.
+ *
+ * Resilience patterns applied:
+ * - @CircuitBreaker  – opens after 50 % failure rate over 10 calls, waits 30 s before half-opening.
+ * - @Retry           – retries transient failures up to 3 times with exponential back-off.
  */
 @Service
 public class BankingAPIServiceImpl implements BankingAPIService {
 
     private static final Logger logger = LoggerFactory.getLogger(BankingAPIServiceImpl.class);
+    private static final String CB_NAME = "bankingApi";
 
-    // Simulated account balances for testing
     private final Map<String, BigDecimal> accountBalances = new ConcurrentHashMap<>();
-
-    // Default starting balance for new accounts
     private static final BigDecimal DEFAULT_BALANCE = BigDecimal.valueOf(10000);
 
     public BankingAPIServiceImpl() {
-        // Initialize some test accounts
         accountBalances.put("1234567890", BigDecimal.valueOf(10000));
         accountBalances.put("0987654321", BigDecimal.valueOf(5000));
         accountBalances.put("1111111111", BigDecimal.valueOf(500));
@@ -33,6 +35,7 @@ public class BankingAPIServiceImpl implements BankingAPIService {
     }
 
     @Override
+    @CircuitBreaker(name = CB_NAME, fallbackMethod = "validateAccountFallback")
     public boolean validateAccount(String accountNumber) {
         logger.debug("Validating account: {}", maskAccount(accountNumber));
 
@@ -41,7 +44,6 @@ public class BankingAPIServiceImpl implements BankingAPIService {
             return false;
         }
 
-        // Validate account number format (10 digits, numeric only)
         boolean isValid = accountNumber.matches("^\\d{10}$");
 
         if (!isValid) {
@@ -49,11 +51,18 @@ public class BankingAPIServiceImpl implements BankingAPIService {
         } else {
             logger.debug("Account {} validated successfully", maskAccount(accountNumber));
         }
-
         return isValid;
     }
 
+    @SuppressWarnings("unused")
+    public boolean validateAccountFallback(String accountNumber, Throwable t) {
+        logger.error("validateAccount circuit-breaker fallback triggered for account {}: {}",
+                maskAccount(accountNumber), t.getMessage());
+        return false;
+    }
+
     @Override
+    @CircuitBreaker(name = CB_NAME, fallbackMethod = "hasSufficientFundsFallback")
     public boolean hasSufficientFunds(String accountNumber, BigDecimal amount) {
         logger.debug("Checking funds for account {}: requested amount {}",
                 maskAccount(accountNumber), amount);
@@ -70,11 +79,18 @@ public class BankingAPIServiceImpl implements BankingAPIService {
             logger.info("Insufficient funds for account {}: balance={}, requested={}",
                     maskAccount(accountNumber), balance, amount);
         }
-
         return hasFunds;
     }
 
+    @SuppressWarnings("unused")
+    public boolean hasSufficientFundsFallback(String accountNumber, BigDecimal amount, Throwable t) {
+        logger.error("hasSufficientFunds circuit-breaker fallback triggered: {}", t.getMessage());
+        return false;
+    }
+
     @Override
+    @CircuitBreaker(name = CB_NAME, fallbackMethod = "transferFundsFallback")
+    @Retry(name = CB_NAME)
     public void transferFunds(String sourceAccount, String destinationAccount, BigDecimal amount) {
         logger.info("Initiating transfer: {} -> {}, amount: {}",
                 maskAccount(sourceAccount), maskAccount(destinationAccount), amount);
@@ -84,7 +100,6 @@ public class BankingAPIServiceImpl implements BankingAPIService {
         }
 
         synchronized (this) {
-            // Deduct from source
             BigDecimal sourceBalance = getAccountBalance(sourceAccount);
             if (sourceBalance.compareTo(amount) < 0) {
                 logger.error("Transfer failed: insufficient funds in source account {}",
@@ -95,37 +110,37 @@ public class BankingAPIServiceImpl implements BankingAPIService {
             deductFunds(sourceAccount, amount);
             addFunds(destinationAccount, amount);
 
-            logger.info("Transfer completed successfully: {} -> {}, amount: {}",
+            logger.info("Transfer completed: {} -> {}, amount: {}",
                     maskAccount(sourceAccount), maskAccount(destinationAccount), amount);
         }
     }
 
-    /**
-     * Gets the current balance of an account.
-     */
+    @SuppressWarnings("unused")
+    public void transferFundsFallback(String sourceAccount, String destinationAccount,
+                                      BigDecimal amount, Throwable t) {
+        logger.error("transferFunds circuit-breaker fallback triggered for transfer {} -> {}: {}",
+                maskAccount(sourceAccount), maskAccount(destinationAccount), t.getMessage());
+        throw new IllegalStateException("Banking service is temporarily unavailable. Please try again later.", t);
+    }
+
     public BigDecimal getAccountBalance(String accountNumber) {
         return accountBalances.computeIfAbsent(accountNumber, k -> DEFAULT_BALANCE);
     }
 
     private void deductFunds(String accountNumber, BigDecimal amount) {
-        logger.debug("Deducting {} from account {}", amount, maskAccount(accountNumber));
         accountBalances.compute(accountNumber, (key, balance) -> {
-            BigDecimal currentBalance = balance != null ? balance : DEFAULT_BALANCE;
-            return currentBalance.subtract(amount);
+            BigDecimal current = balance != null ? balance : DEFAULT_BALANCE;
+            return current.subtract(amount);
         });
     }
 
     private void addFunds(String accountNumber, BigDecimal amount) {
-        logger.debug("Adding {} to account {}", amount, maskAccount(accountNumber));
         accountBalances.compute(accountNumber, (key, balance) -> {
-            BigDecimal currentBalance = balance != null ? balance : BigDecimal.ZERO;
-            return currentBalance.add(amount);
+            BigDecimal current = balance != null ? balance : BigDecimal.ZERO;
+            return current.add(amount);
         });
     }
 
-    /**
-     * Masks account number for logging security.
-     */
     private String maskAccount(String accountNumber) {
         if (accountNumber == null || accountNumber.length() <= 4) {
             return "****";
@@ -134,7 +149,7 @@ public class BankingAPIServiceImpl implements BankingAPIService {
     }
 
     /**
-     * Resets account balances to default values (for testing purposes).
+     * Resets account balances to defaults (for testing only).
      */
     public void resetBalances() {
         accountBalances.clear();

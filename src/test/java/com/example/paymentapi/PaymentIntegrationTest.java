@@ -134,7 +134,7 @@ public class PaymentIntegrationTest {
                             .contentType(MediaType.APPLICATION_JSON)
                             .header("Authorization", authToken)
                             .content(objectMapper.writeValueAsString(request)))
-                    .andExpect(status().isOk())
+                    .andExpect(status().isCreated())
                     .andExpect(jsonPath("$.id").exists())
                     .andExpect(jsonPath("$.status").value("COMPLETED"))
                     .andExpect(jsonPath("$.createdAt").exists());
@@ -446,7 +446,7 @@ public class PaymentIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", authToken)
                         .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isOk())
+                .andExpect(status().isCreated())
                 .andReturn();
 
         String responseJson = result.getResponse().getContentAsString();

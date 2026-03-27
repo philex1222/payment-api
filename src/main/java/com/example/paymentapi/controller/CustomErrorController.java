@@ -6,7 +6,7 @@ import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.servlet.ModelAndView;
 
-import javax.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletRequest;
 
 @Controller
 public class CustomErrorController implements ErrorController {
@@ -16,41 +16,23 @@ public class CustomErrorController implements ErrorController {
         ModelAndView modelAndView = new ModelAndView();
         modelAndView.setViewName("error");
 
-        String errorMsg = "";
+        String errorMsg;
         int httpErrorCode = getErrorCode(request);
 
-        switch (httpErrorCode) {
-            case 400: {
-                errorMsg = "Http Error Code: 400. Bad Request";
-                break;
-            }
-            case 401: {
-                errorMsg = "Http Error Code: 401. Unauthorized";
-                break;
-            }
-            case 404: {
-                errorMsg = "Http Error Code: 404. Resource not found";
-                break;
-            }
-            case 500: {
-                errorMsg = "Http Error Code: 500. Internal Server Error";
-                break;
-            }
-            default: {
-                errorMsg = "Unexpected error occurred";
-                break;
-            }
-        }
+        errorMsg = switch (httpErrorCode) {
+            case 400 -> "Http Error Code: 400. Bad Request";
+            case 401 -> "Http Error Code: 401. Unauthorized";
+            case 404 -> "Http Error Code: 404. Resource not found";
+            case 500 -> "Http Error Code: 500. Internal Server Error";
+            default -> "Unexpected error occurred";
+        };
 
         modelAndView.addObject("errorMsg", errorMsg);
         return modelAndView;
     }
 
     private int getErrorCode(HttpServletRequest request) {
-        return (Integer) request.getAttribute("javax.servlet.error.status_code");
-    }
-
-    public String getErrorPath() {
-        return "/error";
+        Object code = request.getAttribute("jakarta.servlet.error.status_code");
+        return code instanceof Integer ? (Integer) code : HttpStatus.INTERNAL_SERVER_ERROR.value();
     }
 }

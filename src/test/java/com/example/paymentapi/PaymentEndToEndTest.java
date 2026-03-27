@@ -138,7 +138,7 @@ public class PaymentEndToEndTest {
                     PaymentResponse.class
             );
 
-            assertEquals(HttpStatus.OK, response.getStatusCode());
+            assertEquals(HttpStatus.CREATED, response.getStatusCode());
             assertNotNull(response.getBody());
             assertNotNull(response.getBody().getId());
             assertEquals("COMPLETED", response.getBody().getStatus());
@@ -399,7 +399,7 @@ public class PaymentEndToEndTest {
                         PaymentResponse.class
                 );
 
-                assertEquals(HttpStatus.OK, response.getStatusCode());
+                assertEquals(HttpStatus.CREATED, response.getStatusCode());
             }
 
             // Retrieve all payments
