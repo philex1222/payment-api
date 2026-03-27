@@ -21,7 +21,6 @@ permissions:
 
 env:
   JAVA_VERSION: "17"
-  # Limit Maven JVM heap; -XX:TieredStopAtLevel=1 speeds up CI compilations
   MAVEN_OPTS: "-Xmx1024m -XX:+TieredCompilation -XX:TieredStopAtLevel=1"
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -41,14 +40,14 @@ jobs:
 
     steps:
       - name: Checkout source code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up JDK ${{ env.JAVA_VERSION }} (Temurin)
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           java-version: ${{ env.JAVA_VERSION }}
           distribution: temurin
-          cache: maven         # Caches ~/.m2 keyed on **/pom.xml hash
+          cache: maven
 
       - name: Build, run all tests, and enforce JaCoCo threshold
         run: |
@@ -56,16 +55,16 @@ jobs:
               -Dspring.profiles.active=test
 
       - name: Publish JUnit test results as Check Run
-        uses: dorny/test-reporter@v1
-        if: always()           # Run even if tests fail so results are always published
+        uses: dorny/test-reporter@v3
+        if: always()
         with:
           name: "Test Results"
           path: "target/surefire-reports/*.xml"
           reporter: java-junit
-          fail-on-error: "false"   # Don't fail workflow if reporter itself errors (e.g. fork PRs)
+          fail-on-error: "false"
 
       - name: Upload JaCoCo HTML coverage report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: jacoco-report
@@ -73,7 +72,7 @@ jobs:
           retention-days: 14
 
       - name: Upload application JAR
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: payment-api-jar
           path: target/payment-api-*.jar
@@ -89,45 +88,44 @@ jobs:
 
     permissions:
       contents: read
-      security-events: write   # Required to upload SARIF to the Security tab
+      security-events: write
 
     steps:
       - name: Checkout source code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Build Docker image (local, no push)
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: .
           push: false
           tags: payment-api:${{ github.sha }}
-          # Reuse GitHub Actions cache for faster layer caching
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          load: true            # Load into local Docker daemon for Trivy
+          load: true
 
       - name: Scan image with Trivy (CRITICAL & HIGH CVEs)
-        uses: aquasecurity/trivy-action@0.20.0
+        uses: aquasecurity/trivy-action@v0.35.0
         with:
           image-ref: payment-api:${{ github.sha }}
           format: sarif
           output: trivy-results.sarif
           severity: CRITICAL,HIGH
-          exit-code: "0"        # Report findings; do not fail the build here
+          exit-code: "0"
           ignore-unfixed: "true"
 
       - name: Upload Trivy SARIF to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         if: always()
         with:
           sarif_file: trivy-results.sarif
           category: trivy-container
 
-      - name: Upload Trivy SARIF as artifact (for download/review)
-        uses: actions/upload-artifact@v4
+      - name: Upload Trivy SARIF as artifact
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: trivy-sarif
@@ -139,7 +137,7 @@ jobs:
     name: OWASP Dependency Check
     runs-on: ubuntu-latest
     needs: build-and-test
-    timeout-minutes: 40        # NVD database download can be slow (several minutes)
+    timeout-minutes: 40
 
     permissions:
       contents: read
@@ -147,16 +145,31 @@ jobs:
 
     steps:
       - name: Checkout source code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
-      # Cache the NVD database between runs to speed up subsequent checks
       - name: Cache OWASP NVD data directory
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.dependency-check/data
           key: owasp-nvd-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
           restore-keys: |
             owasp-nvd-${{ runner.os }}-
+
+      # Build args conditionally — passing --nvdApiKey with an empty value
+      # causes the tool to exit immediately with "Missing argument for option".
+      # The NVD_API_KEY secret is optional; without it the tool still works
+      # but NVD database downloads are rate-limited and slower.
+      - name: Set OWASP Dependency-Check arguments
+        id: owasp-args
+        shell: bash
+        env:
+          NVD_KEY: ${{ secrets.NVD_API_KEY }}
+        run: |
+          ARGS="--failOnCVSS 9 --enableRetired"
+          if [ -n "$NVD_KEY" ]; then
+            ARGS="$ARGS --nvdApiKey $NVD_KEY"
+          fi
+          echo "value=$ARGS" >> "$GITHUB_OUTPUT"
 
       - name: Run OWASP Dependency-Check
         uses: dependency-check/Dependency-Check_Action@main
@@ -165,23 +178,17 @@ jobs:
           path: .
           format: SARIF
           out: reports
-          # Fail only on CVSS ≥9 (CRITICAL); adjust as needed.
-          # To speed up NVD downloads, add secret NVD_API_KEY in repo settings.
-          # See: https://nvd.nist.gov/developers/request-an-api-key
-          args: >
-            --failOnCVSS 9
-            --enableRetired
-            --nvdApiKey ${{ secrets.NVD_API_KEY }}
+          args: ${{ steps.owasp-args.outputs.value }}
 
       - name: Upload SARIF to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         if: always()
         with:
           sarif_file: reports/dependency-check-report.sarif
           category: owasp-dependency-check
 
       - name: Upload full OWASP HTML/SARIF report as artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: owasp-report

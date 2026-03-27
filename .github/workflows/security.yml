@@ -1,12 +1,9 @@
 name: Security — Scheduled Deep Scan
 
-# Runs a comprehensive security audit once a week and on-demand.
-# Separate from the per-commit CI scans so we can afford longer timeouts
-# and more thorough checks without blocking developer workflows.
 on:
   schedule:
     - cron: "0 3 * * 1"   # Every Monday at 03:00 UTC
-  workflow_dispatch:        # Allow manual triggering at any time
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -15,7 +12,7 @@ permissions:
 jobs:
 # ─────────────────────────────────────────────────────────────────────────────
 
-  # ── 1. Full OWASP Dependency-Check (all severities reported, no threshold) ─
+  # ── 1. Full OWASP Dependency-Check (all severities reported) ────────────────
   owasp-full-scan:
     name: OWASP Full Dependency Scan
     runs-on: ubuntu-latest
@@ -27,37 +24,46 @@ jobs:
 
     steps:
       - name: Checkout source code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Cache OWASP NVD data directory
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.dependency-check/data
           key: owasp-nvd-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
           restore-keys: |
             owasp-nvd-${{ runner.os }}-
 
+      - name: Set OWASP Dependency-Check arguments
+        id: owasp-args
+        shell: bash
+        env:
+          NVD_KEY: ${{ secrets.NVD_API_KEY }}
+        run: |
+          ARGS="--enableRetired --enableExperimental"
+          if [ -n "$NVD_KEY" ]; then
+            ARGS="$ARGS --nvdApiKey $NVD_KEY"
+          fi
+          echo "value=$ARGS" >> "$GITHUB_OUTPUT"
+
       - name: Run OWASP Dependency-Check (all severities)
         uses: dependency-check/Dependency-Check_Action@main
         with:
           project: payment-api
           path: .
-          format: "ALL"        # Generates HTML, JSON, and SARIF reports
+          format: "ALL"
           out: reports
-          args: >
-            --enableRetired
-            --enableExperimental
-            --nvdApiKey ${{ secrets.NVD_API_KEY }}
+          args: ${{ steps.owasp-args.outputs.value }}
 
       - name: Upload SARIF to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         if: always()
         with:
           sarif_file: reports/dependency-check-report.sarif
           category: owasp-scheduled
 
       - name: Upload full OWASP reports (HTML + JSON + SARIF)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: owasp-full-report-${{ github.run_id }}
@@ -72,12 +78,12 @@ jobs:
 
     permissions:
       contents: read
-      packages: read           # To pull the image from GHCR
+      packages: read
       security-events: write
 
     steps:
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -87,7 +93,7 @@ jobs:
         run: docker pull ghcr.io/${{ github.repository }}:latest
 
       - name: Scan with Trivy (all severities)
-        uses: aquasecurity/trivy-action@0.20.0
+        uses: aquasecurity/trivy-action@v0.35.0
         with:
           image-ref: ghcr.io/${{ github.repository }}:latest
           format: sarif
@@ -97,14 +103,14 @@ jobs:
           ignore-unfixed: "false"
 
       - name: Upload Trivy SARIF to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         if: always()
         with:
           sarif_file: trivy-image.sarif
           category: trivy-scheduled
 
       - name: Upload Trivy SARIF as artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: trivy-image-scan-${{ github.run_id }}
@@ -123,10 +129,10 @@ jobs:
 
     steps:
       - name: Checkout source code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Scan repository with Trivy (filesystem mode)
-        uses: aquasecurity/trivy-action@0.20.0
+        uses: aquasecurity/trivy-action@v0.35.0
         with:
           scan-type: fs
           scan-ref: .
@@ -134,18 +140,17 @@ jobs:
           output: trivy-repo.sarif
           severity: CRITICAL,HIGH,MEDIUM
           exit-code: "0"
-          # Detect hardcoded secrets and misconfigurations in addition to CVEs
           scanners: vuln,secret,misconfig
 
       - name: Upload SARIF to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         if: always()
         with:
           sarif_file: trivy-repo.sarif
           category: trivy-filesystem
 
       - name: Upload Trivy filesystem SARIF as artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: trivy-repo-scan-${{ github.run_id }}

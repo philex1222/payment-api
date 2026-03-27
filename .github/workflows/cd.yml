@@ -1,8 +1,5 @@
 name: CD — Publish & Deploy
 
-# Triggered only on pushes to master (after the CI workflow has validated the commit).
-# IMPORTANT: Configure a branch protection rule on master that requires the CI workflow
-# to pass before merging — this ensures CD only deploys code that has passed all tests.
 on:
   push:
     branches: [master]
@@ -10,7 +7,6 @@ on:
       - "**.md"
       - ".gitignore"
       - "docs/**"
-  # Allow manual triggering for hotfixes or re-deployments
   workflow_dispatch:
     inputs:
       environment:
@@ -22,7 +18,6 @@ on:
           - staging
           - production
 
-# Never cancel an in-flight deployment — let it finish to avoid a half-deployed state
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
@@ -42,9 +37,9 @@ jobs:
 
     permissions:
       contents: read
-      packages: write        # Required to push to GHCR
-      attestations: write    # Required for SBOM/provenance attestation
-      id-token: write        # Required for provenance signing
+      packages: write
+      attestations: write
+      id-token: write
 
     outputs:
       image-digest: ${{ steps.build-push.outputs.digest }}
@@ -53,25 +48,21 @@ jobs:
 
     steps:
       - name: Checkout source code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Log in to GitHub Container Registry (GHCR)
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Produces tags:
-      #   ghcr.io/<owner>/payment-api:sha-<short-sha>
-      #   ghcr.io/<owner>/payment-api:latest          (master only)
-      #   ghcr.io/<owner>/payment-api:build-<run_num> (master only)
       - name: Extract Docker image metadata (tags & labels)
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ghcr.io/${{ github.repository }}
           tags: |
@@ -85,7 +76,7 @@ jobs:
 
       - name: Build and push Docker image to GHCR
         id: build-push
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: .
           push: true
@@ -93,10 +84,10 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          provenance: true   # Attach SLSA provenance attestation
-          sbom: true         # Attach Software Bill of Materials (SBOM)
+          provenance: true
+          sbom: true
 
-      - name: Output published image reference
+      - name: Write image summary
         run: |
           echo "### Docker Image Published" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -108,16 +99,11 @@ jobs:
           echo '```' >> $GITHUB_STEP_SUMMARY
 
   # ── 2. Deploy to Staging ────────────────────────────────────────────────────
-  #
-  # The `staging` GitHub Environment can be configured in:
-  #   Repo Settings → Environments → staging
-  # to add protection rules (e.g. specific reviewers, wait timers).
   deploy-staging:
     name: Deploy to Staging
     runs-on: ubuntu-latest
     needs: publish-image
     timeout-minutes: 15
-    # Skip staging if manual dispatch targeted production directly
     if: >
       github.event_name == 'push' ||
       (github.event_name == 'workflow_dispatch' &&
@@ -125,17 +111,15 @@ jobs:
 
     environment:
       name: staging
-      url: ${{ vars.STAGING_URL }}    # Set STAGING_URL in repo/environment variables
+      url: ${{ vars.STAGING_URL }}
 
     steps:
-      - name: Checkout source code (for docker-compose reference)
-        uses: actions/checkout@v4
+      - name: Checkout source code
+        uses: actions/checkout@v6
 
       - name: Deploy to staging server
         # ── Replace this step with your actual deployment mechanism ──────────
-        # Examples:
-        #
-        # Option A — SSH + Docker (VPS / bare metal):
+        # Option A — SSH + Docker Compose (VPS / bare metal):
         #   uses: appleboy/ssh-action@master
         #   with:
         #     host: ${{ secrets.STAGING_HOST }}
@@ -163,7 +147,6 @@ jobs:
           echo "Image tags:   $IMAGE_TAGS"
           echo ""
           echo "TODO: Replace this step with your deployment command."
-          echo "See the comments above for common deployment patterns."
 
       - name: Write staging deployment summary
         run: |
@@ -177,16 +160,13 @@ jobs:
           echo "| Triggered by | ${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
 
   # ── 3. Deploy to Production ─────────────────────────────────────────────────
-  #
-  # IMPORTANT: Configure the `production` GitHub Environment with required reviewers
-  # so that this job waits for a manual approval before proceeding:
-  #   Repo Settings → Environments → production → Required reviewers → Add reviewer(s)
+  # Configure the `production` GitHub Environment with required reviewers:
+  #   Repo Settings → Environments → production → Required reviewers
   deploy-production:
     name: Deploy to Production
     runs-on: ubuntu-latest
     needs: [publish-image, deploy-staging]
     timeout-minutes: 15
-    # For manual dispatch, allow targeting production directly (still requires approval gate)
     if: >
       github.event_name == 'push' ||
       (github.event_name == 'workflow_dispatch' &&
@@ -194,17 +174,13 @@ jobs:
 
     environment:
       name: production
-      url: ${{ vars.PRODUCTION_URL }}    # Set PRODUCTION_URL in repo/environment variables
+      url: ${{ vars.PRODUCTION_URL }}
 
     steps:
       - name: Checkout source code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Deploy to production server
-        # ── Replace this step with your actual deployment mechanism ──────────
-        # Same patterns as staging — see deploy-staging job above.
-        # Use the same image digest that was deployed to (and validated on) staging.
-        # ─────────────────────────────────────────────────────────────────────
         env:
           IMAGE_DIGEST: ${{ needs.publish-image.outputs.image-digest }}
           IMAGE_TAGS: ${{ needs.publish-image.outputs.image-tags }}
