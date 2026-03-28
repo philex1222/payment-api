@@ -1,0 +1,131 @@
+# =============================================================================
+# payment-api — Staging Overrides
+#
+# Merged on top of values.yaml. Secrets come from Kubernetes Secrets (created
+# out-of-band or via an External Secrets operator).
+# Install:
+#   helm upgrade --install payment-api ./helm/payment-api \
+#     -f helm/payment-api/values-staging.yaml \
+#     -n payment-staging --create-namespace
+# =============================================================================
+
+replicaCount: 2
+
+image:
+  repository: ghcr.io/philex1222/payment-api
+  # Tag is injected at deploy time: --set image.tag=sha-<shortsha>
+  tag: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets:
+  - name: ghcr-pull-secret
+
+env:
+  - name: JAVA_OPTS
+    value: >-
+      -XX:MaxRAMPercentage=75
+      -XX:InitialRAMPercentage=50
+      -XX:+UseG1GC
+      -XX:+HeapDumpOnOutOfMemoryError
+      -XX:HeapDumpPath=/tmp/heap-dump.hprof
+      -Djava.security.egd=file:/dev/./urandom
+      -Dspring.backgroundpreinitializer.ignore=true
+
+  - name: SPRING_PROFILES_ACTIVE
+    value: "kubernetes,staging"
+
+  - name: DB_URL
+    valueFrom:
+      secretKeyRef:
+        name: payment-api-db-secret
+        key: url
+
+  - name: DB_USERNAME
+    valueFrom:
+      secretKeyRef:
+        name: payment-api-db-secret
+        key: username
+
+  - name: DB_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: payment-api-db-secret
+        key: password
+
+  - name: REDIS_HOST
+    valueFrom:
+      configMapKeyRef:
+        name: payment-api-config
+        key: redis.host
+
+  - name: REDIS_PORT
+    valueFrom:
+      configMapKeyRef:
+        name: payment-api-config
+        key: redis.port
+
+  - name: JWT_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: payment-api-jwt-secret
+        key: secret
+
+  - name: JWT_EXPIRATION_MS
+    valueFrom:
+      configMapKeyRef:
+        name: payment-api-config
+        key: jwt.expiration.ms
+
+resources:
+  requests:
+    memory: "512Mi"
+    cpu: "250m"
+  limits:
+    memory: "1Gi"
+    cpu: "1000m"
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 4
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-staging"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+  hosts:
+    - host: payment-api.staging.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: payment-api-staging-tls
+      hosts:
+        - payment-api.staging.example.com
+
+configMap:
+  data:
+    redis.host: "redis-master"
+    redis.port: "6379"
+    jwt.expiration.ms: "86400000"
+    rate-limit.limit: "200"
+    rate-limit.refreshPeriod: "60000"
+    rate-limit.timeout: "1000"
+    logging.level.root: "INFO"
+    logging.level.com.example.paymentapi: "INFO"
+
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: DoNotSchedule
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/name: payment-api

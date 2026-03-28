@@ -1,0 +1,28 @@
+---
+# Staging namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: payment-staging
+  labels:
+    app.kubernetes.io/name: payment-api
+    environment: staging
+    # Pod security — enforce restricted policy so workloads must run non-root
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: latest
+
+---
+# Production namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: payment-prod
+  labels:
+    app.kubernetes.io/name: payment-api
+    environment: production
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: latest

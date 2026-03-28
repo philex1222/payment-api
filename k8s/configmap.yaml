@@ -1,0 +1,33 @@
+# =============================================================================
+# Base ConfigMap — non-sensitive application configuration
+#
+# In practice, populate this via Helm (the chart renders its own ConfigMap).
+# This file serves as a reference / manual fallback.
+#
+# Apply:
+#   kubectl apply -f k8s/configmap.yaml -n payment-staging
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: payment-api-config
+  namespace: payment-staging          # change to payment-prod for production
+  labels:
+    app.kubernetes.io/name: payment-api
+    app.kubernetes.io/component: config
+data:
+  # Redis connection
+  redis.host: "redis-master"
+  redis.port: "6379"
+
+  # JWT
+  jwt.expiration.ms: "86400000"
+
+  # Application rate-limit settings (mirrors application.properties)
+  rate-limit.limit: "100"
+  rate-limit.refreshPeriod: "60000"
+  rate-limit.timeout: "1000"
+
+  # Logging levels
+  logging.level.root: "INFO"
+  logging.level.com.example.paymentapi: "INFO"

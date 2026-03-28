@@ -5,6 +5,7 @@ import com.example.paymentapi.dto.PaymentResponse;
 import com.example.paymentapi.dto.PaymentStatusRequest;
 import com.example.paymentapi.dto.ReversalRequest;
 import com.example.paymentapi.model.Payment;
+import com.example.paymentapi.service.IdempotencyService;
 import com.example.paymentapi.service.PaymentService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -14,33 +15,58 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/payments")
 @Tag(name = "Payments", description = "Operations related to payment processing")
 public class PaymentController {
 
-    private final PaymentService paymentService;
+    static final String IDEMPOTENCY_KEY_HEADER = "Idempotency-Key";
 
-    public PaymentController(PaymentService paymentService) {
+    private final PaymentService paymentService;
+    private final IdempotencyService idempotencyService;
+
+    public PaymentController(PaymentService paymentService, IdempotencyService idempotencyService) {
         this.paymentService = paymentService;
+        this.idempotencyService = idempotencyService;
     }
 
     @PostMapping
-    @Operation(summary = "Create a new payment")
+    @Operation(summary = "Create a new payment",
+               description = "Optionally supply an 'Idempotency-Key' header to prevent duplicate charges on network retries.")
     @ApiResponses({
         @ApiResponse(responseCode = "201", description = "Payment created successfully"),
         @ApiResponse(responseCode = "400", description = "Invalid payment request"),
         @ApiResponse(responseCode = "500", description = "Internal server error")
     })
     public ResponseEntity<PaymentResponse> createPayment(
+            @Parameter(description = "Client-generated unique key to prevent duplicate payments (UUID recommended)")
+            @RequestHeader(value = IDEMPOTENCY_KEY_HEADER, required = false) String idempotencyKey,
             @Valid @RequestBody PaymentRequest paymentRequest) {
+
+        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
+            Optional<PaymentResponse> cached = idempotencyService.get(idempotencyKey);
+            if (cached.isPresent()) {
+                // Return the original response — same status code, with a replay marker
+                return ResponseEntity.status(HttpStatus.CREATED)
+                        .header(HttpHeaders.WARNING, "299 - \"Idempotency-Replayed\"")
+                        .body(cached.get());
+            }
+        }
+
         PaymentResponse paymentResponse = paymentService.createPayment(paymentRequest);
+
+        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
+            idempotencyService.store(idempotencyKey, paymentResponse);
+        }
+
         return ResponseEntity.status(HttpStatus.CREATED).body(paymentResponse);
     }
 

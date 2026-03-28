@@ -1,0 +1,62 @@
+payment-api has been deployed.
+
+Release : {{ .Release.Name }}
+Namespace: {{ .Release.Namespace }}
+Chart    : {{ .Chart.Name }}-{{ .Chart.Version }}
+Image    : {{ include "payment-api.image" . }}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Access the application
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+{{- if .Values.ingress.enabled }}
+  {{- range .Values.ingress.hosts }}
+  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ .host }}/
+  {{- end }}
+{{- else if eq .Values.service.type "NodePort" }}
+  export NODE_PORT=$(kubectl get svc {{ include "payment-api.fullname" . }} -n {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}")
+  export NODE_IP=$(kubectl get nodes -o jsonpath="{.items[0].status.addresses[0].address}")
+  echo "http://${NODE_IP}:${NODE_PORT}"
+{{- else if eq .Values.service.type "LoadBalancer" }}
+  NOTE: It may take a few minutes for the LoadBalancer IP to be assigned.
+  export SERVICE_IP=$(kubectl get svc {{ include "payment-api.fullname" . }} -n {{ .Release.Namespace }} -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+  echo "http://${SERVICE_IP}:{{ .Values.service.port }}"
+{{- else }}
+  # Port-forward to reach the API locally:
+  kubectl port-forward svc/{{ include "payment-api.fullname" . }} 8080:{{ .Values.service.port }} -n {{ .Release.Namespace }}
+  # Then open: http://localhost:8080
+{{- end }}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Useful diagnostic commands
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # Pod status
+  kubectl get pods -l app.kubernetes.io/name={{ include "payment-api.name" . }} -n {{ .Release.Namespace }}
+
+  # Logs
+  kubectl logs -l app.kubernetes.io/name={{ include "payment-api.name" . }} -n {{ .Release.Namespace }} --tail=100
+
+  # Health endpoint
+  kubectl exec deploy/{{ include "payment-api.fullname" . }} -n {{ .Release.Namespace }} -- \
+    wget -qO- http://localhost:8080/actuator/health
+
+  # Prometheus metrics
+  kubectl exec deploy/{{ include "payment-api.fullname" . }} -n {{ .Release.Namespace }} -- \
+    wget -qO- http://localhost:8080/actuator/prometheus | head -40
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Required secrets (must be created before first install)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  payment-api-db-secret   keys: url, username, password
+  payment-api-jwt-secret  keys: secret
+
+  Example (replace values with real credentials):
+
+  kubectl create secret generic payment-api-db-secret \
+    --from-literal=url='jdbc:mysql://mysql:3306/payment_db?useSSL=true&requireSSL=false' \
+    --from-literal=username='appuser' \
+    --from-literal=password='<strong-password>' \
+    -n {{ .Release.Namespace }}
+
+  kubectl create secret generic payment-api-jwt-secret \
+    --from-literal=secret='<min-64-char-secret-for-HS512>' \
+    -n {{ .Release.Namespace }}

@@ -1,0 +1,295 @@
+# =============================================================================
+# payment-api — Default Helm Values
+#
+# These are safe defaults suitable for a local / dev cluster.
+# Override per-environment via values-dev.yaml, values-staging.yaml,
+# or values-prod.yaml.
+# =============================================================================
+
+# -- Number of pod replicas
+replicaCount: 1
+
+image:
+  # -- Container registry + repository (no tag)
+  repository: ghcr.io/philex1222/payment-api
+  # -- Image pull policy. IfNotPresent is safe for pinned tags; use Always only when
+  #    running mutable tags (e.g. latest) and you understand the implications.
+  pullPolicy: IfNotPresent
+  # -- Image tag. Defaults to Chart.AppVersion when empty.
+  tag: ""
+
+# -- Image pull secrets (array of {name: <secret>})
+imagePullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+
+# =============================================================================
+# Service Account
+# =============================================================================
+serviceAccount:
+  # -- Create a dedicated ServiceAccount for this workload
+  create: true
+  # -- Annotations to add (e.g. for IRSA / Workload Identity)
+  annotations: {}
+  # -- Override the generated name; defaults to the chart fullname
+  name: ""
+  # -- Automount the SA token into the pod
+  automountServiceAccountToken: false
+
+# =============================================================================
+# Pod-level settings
+# =============================================================================
+podAnnotations:
+  # Prometheus scraping via annotations (works with prometheus-operator PodMonitor too)
+  prometheus.io/scrape: "true"
+  prometheus.io/path: "/actuator/prometheus"
+  prometheus.io/port: "8080"
+
+podLabels: {}
+
+podSecurityContext:
+  # Run all processes as the non-root appuser (UID 1000) created in the Dockerfile
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+# =============================================================================
+# Container security context
+# =============================================================================
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
+  capabilities:
+    drop:
+      - ALL
+
+# =============================================================================
+# Service
+# =============================================================================
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8080
+  # -- Extra annotations on the Service object
+  annotations: {}
+
+# =============================================================================
+# Ingress
+# =============================================================================
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+    # kubernetes.io/ingress.class: nginx
+    # cert-manager.io/cluster-issuer: letsencrypt-prod
+  hosts:
+    - host: payment-api.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+  # - secretName: payment-api-tls
+  #   hosts:
+  #     - payment-api.example.com
+
+# =============================================================================
+# Resources
+# Spring Boot with G1GC: request ~512Mi/250m, limit ~1Gi/1000m.
+# The JVM heap is capped at 75% of the container limit (~768Mi of 1Gi).
+# =============================================================================
+resources:
+  requests:
+    memory: "512Mi"
+    cpu: "250m"
+  limits:
+    memory: "1Gi"
+    cpu: "1000m"
+
+# =============================================================================
+# Liveness & readiness probes (Spring Boot Actuator)
+# =============================================================================
+livenessProbe:
+  httpGet:
+    path: /actuator/health/liveness
+    port: 8080
+  # Allow 90 s for JVM + Spring context startup before probing starts
+  initialDelaySeconds: 90
+  periodSeconds: 15
+  timeoutSeconds: 5
+  failureThreshold: 3
+  successThreshold: 1
+
+readinessProbe:
+  httpGet:
+    path: /actuator/health/readiness
+    port: 8080
+  # Readiness should pass sooner than liveness; 45 s is a reasonable head start
+  initialDelaySeconds: 45
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+  successThreshold: 1
+
+startupProbe:
+  httpGet:
+    path: /actuator/health/liveness
+    port: 8080
+  # 30 × 10 s = 5-minute maximum window for the very first startup
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 30
+  successThreshold: 1
+
+# =============================================================================
+# Horizontal Pod Autoscaler
+# =============================================================================
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+# =============================================================================
+# Pod Disruption Budget
+# Enabled automatically when replicaCount > 1
+# =============================================================================
+podDisruptionBudget:
+  enabled: false
+  # Use either minAvailable OR maxUnavailable, not both
+  minAvailable: 1
+  # maxUnavailable: 1
+
+# =============================================================================
+# Volumes — tmpfs mounts required because securityContext.readOnlyRootFilesystem=true
+# Spring Boot and the JVM need writable temp and log dirs.
+# =============================================================================
+extraVolumes:
+  - name: tmp
+    emptyDir: {}
+  - name: logs
+    emptyDir: {}
+
+extraVolumeMounts:
+  - name: tmp
+    mountPath: /tmp
+  - name: logs
+    mountPath: /var/log/payment-api
+
+# =============================================================================
+# Application environment variables
+# Non-sensitive values go here; secrets go in externalSecret / secret refs.
+# =============================================================================
+env:
+  # JVM tuning for containerised workloads — heap = 75% of container memory limit
+  - name: JAVA_OPTS
+    value: >-
+      -XX:MaxRAMPercentage=75
+      -XX:InitialRAMPercentage=50
+      -XX:+UseG1GC
+      -XX:+HeapDumpOnOutOfMemoryError
+      -XX:HeapDumpPath=/tmp/heap-dump.hprof
+      -Djava.security.egd=file:/dev/./urandom
+      -Dspring.backgroundpreinitializer.ignore=true
+
+  - name: SPRING_PROFILES_ACTIVE
+    value: "kubernetes"
+
+  # Database — values come from a Secret (see envFrom below)
+  - name: DB_URL
+    valueFrom:
+      secretKeyRef:
+        name: payment-api-db-secret
+        key: url
+
+  - name: DB_USERNAME
+    valueFrom:
+      secretKeyRef:
+        name: payment-api-db-secret
+        key: username
+
+  - name: DB_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: payment-api-db-secret
+        key: password
+
+  # Redis — host/port from ConfigMap, no auth in default setup
+  - name: REDIS_HOST
+    valueFrom:
+      configMapKeyRef:
+        name: payment-api-config
+        key: redis.host
+
+  - name: REDIS_PORT
+    valueFrom:
+      configMapKeyRef:
+        name: payment-api-config
+        key: redis.port
+
+  # JWT secret — from Secret
+  - name: JWT_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: payment-api-jwt-secret
+        key: secret
+
+  - name: JWT_EXPIRATION_MS
+    valueFrom:
+      configMapKeyRef:
+        name: payment-api-config
+        key: jwt.expiration.ms
+
+# =============================================================================
+# ConfigMap data — mirrors application.properties non-secret values
+# =============================================================================
+configMap:
+  data:
+    redis.host: "redis-master"
+    redis.port: "6379"
+    jwt.expiration.ms: "86400000"
+    rate-limit.limit: "100"
+    rate-limit.refreshPeriod: "60000"
+    rate-limit.timeout: "1000"
+    logging.level.root: "INFO"
+    logging.level.com.example.paymentapi: "INFO"
+
+# =============================================================================
+# Lifecycle hooks — graceful shutdown
+# preStop sleep gives kube-proxy time to drain connections before SIGTERM
+# =============================================================================
+lifecycle:
+  preStop:
+    exec:
+      command: ["sh", "-c", "sleep 10"]
+
+# Allow 60 s for the app to finish in-flight requests after SIGTERM
+terminationGracePeriodSeconds: 60
+
+# =============================================================================
+# Node scheduling
+# =============================================================================
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+# =============================================================================
+# Topology spread — improves HA by spreading pods across nodes / zones
+# Only effective when replicaCount > 1
+# =============================================================================
+topologySpreadConstraints: []
+# - maxSkew: 1
+#   topologyKey: kubernetes.io/hostname
+#   whenUnsatisfiable: DoNotSchedule
+#   labelSelector:
+#     matchLabels:
+#       app.kubernetes.io/name: payment-api

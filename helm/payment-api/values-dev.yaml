@@ -1,0 +1,116 @@
+# =============================================================================
+# payment-api — Dev / Local Cluster Overrides
+#
+# Merged on top of values.yaml. Only override what differs from defaults.
+# Install:
+#   helm upgrade --install payment-api ./helm/payment-api \
+#     -f helm/payment-api/values-dev.yaml \
+#     -n payment-dev --create-namespace
+# =============================================================================
+
+replicaCount: 1
+
+image:
+  # Point at the locally-built image when using kind/minikube with image load
+  repository: ghcr.io/philex1222/payment-api
+  tag: "latest"
+  pullPolicy: Always
+
+env:
+  - name: JAVA_OPTS
+    value: >-
+      -XX:MaxRAMPercentage=75
+      -XX:InitialRAMPercentage=50
+      -XX:+UseG1GC
+      -XX:+HeapDumpOnOutOfMemoryError
+      -XX:HeapDumpPath=/tmp/heap-dump.hprof
+      -Djava.security.egd=file:/dev/./urandom
+      -Dspring.backgroundpreinitializer.ignore=true
+
+  - name: SPRING_PROFILES_ACTIVE
+    value: "kubernetes,dev"
+
+  # In dev, inline the DB creds directly (not for staging/prod)
+  - name: DB_URL
+    value: "jdbc:mysql://mysql:3306/payment_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC"
+
+  - name: DB_USERNAME
+    value: "root"
+
+  - name: DB_PASSWORD
+    value: "devpassword"
+
+  - name: REDIS_HOST
+    value: "redis-master"
+
+  - name: REDIS_PORT
+    value: "6379"
+
+  - name: JWT_SECRET
+    value: "dev-only-secret-must-be-at-least-64-chars-long-for-hs512-do-not-use-in-prod"
+
+  - name: JWT_EXPIRATION_MS
+    value: "86400000"
+
+# Relax resource requests in dev so it fits on a small local cluster
+resources:
+  requests:
+    memory: "256Mi"
+    cpu: "100m"
+  limits:
+    memory: "768Mi"
+    cpu: "500m"
+
+# Faster probe timings for quicker dev feedback loops
+livenessProbe:
+  httpGet:
+    path: /actuator/health/liveness
+    port: 8080
+  initialDelaySeconds: 60
+  periodSeconds: 15
+  timeoutSeconds: 5
+  failureThreshold: 5
+
+readinessProbe:
+  httpGet:
+    path: /actuator/health/readiness
+    port: 8080
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 5
+
+startupProbe:
+  httpGet:
+    path: /actuator/health/liveness
+    port: 8080
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 30
+
+autoscaling:
+  enabled: false
+
+podDisruptionBudget:
+  enabled: false
+
+ingress:
+  enabled: true
+  className: "nginx"
+  hosts:
+    - host: payment-api.dev.local
+      paths:
+        - path: /
+          pathType: Prefix
+
+configMap:
+  data:
+    redis.host: "redis-master"
+    redis.port: "6379"
+    jwt.expiration.ms: "86400000"
+    rate-limit.limit: "1000"
+    rate-limit.refreshPeriod: "60000"
+    rate-limit.timeout: "1000"
+    logging.level.root: "DEBUG"
+    logging.level.com.example.paymentapi: "DEBUG"

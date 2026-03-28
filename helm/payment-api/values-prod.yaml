@@ -1,0 +1,179 @@
+# =============================================================================
+# payment-api — Production Overrides
+#
+# Merged on top of values.yaml. ALL secrets come from Kubernetes Secrets
+# created out-of-band (never committed to git).
+# Install (human or CD pipeline):
+#   helm upgrade --install payment-api ./helm/payment-api \
+#     -f helm/payment-api/values-prod.yaml \
+#     --set image.tag=sha-<shortsha> \
+#     -n payment-prod --create-namespace \
+#     --atomic --timeout 5m
+# =============================================================================
+
+replicaCount: 3
+
+image:
+  repository: ghcr.io/philex1222/payment-api
+  # Tag MUST be set explicitly at deploy time — never use latest in production
+  tag: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets:
+  - name: ghcr-pull-secret
+
+env:
+  - name: JAVA_OPTS
+    value: >-
+      -XX:MaxRAMPercentage=75
+      -XX:InitialRAMPercentage=50
+      -XX:+UseG1GC
+      -XX:+HeapDumpOnOutOfMemoryError
+      -XX:HeapDumpPath=/tmp/heap-dump.hprof
+      -Djava.security.egd=file:/dev/./urandom
+      -Dspring.backgroundpreinitializer.ignore=true
+
+  - name: SPRING_PROFILES_ACTIVE
+    value: "kubernetes,prod"
+
+  - name: DB_URL
+    valueFrom:
+      secretKeyRef:
+        name: payment-api-db-secret
+        key: url
+
+  - name: DB_USERNAME
+    valueFrom:
+      secretKeyRef:
+        name: payment-api-db-secret
+        key: username
+
+  - name: DB_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: payment-api-db-secret
+        key: password
+
+  - name: REDIS_HOST
+    valueFrom:
+      configMapKeyRef:
+        name: payment-api-config
+        key: redis.host
+
+  - name: REDIS_PORT
+    valueFrom:
+      configMapKeyRef:
+        name: payment-api-config
+        key: redis.port
+
+  - name: JWT_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: payment-api-jwt-secret
+        key: secret
+
+  - name: JWT_EXPIRATION_MS
+    valueFrom:
+      configMapKeyRef:
+        name: payment-api-config
+        key: jwt.expiration.ms
+
+# Production-sized pods: more CPU headroom for payment processing bursts
+resources:
+  requests:
+    memory: "768Mi"
+    cpu: "500m"
+  limits:
+    memory: "1536Mi"
+    cpu: "2000m"
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 65
+  targetMemoryUtilizationPercentage: 75
+
+# Never allow all pods to be simultaneously unavailable during a node drain
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2
+
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "1m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+    # Rate-limit at ingress level (outside the app) as a first line of defence
+    nginx.ingress.kubernetes.io/limit-rps: "50"
+  hosts:
+    - host: payment-api.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: payment-api-prod-tls
+      hosts:
+        - payment-api.example.com
+
+configMap:
+  data:
+    redis.host: "redis-master"
+    redis.port: "6379"
+    jwt.expiration.ms: "86400000"
+    rate-limit.limit: "100"
+    rate-limit.refreshPeriod: "60000"
+    rate-limit.timeout: "1000"
+    logging.level.root: "WARN"
+    logging.level.com.example.paymentapi: "INFO"
+
+# Spread pods across all availability zones
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: topology.kubernetes.io/zone
+    whenUnsatisfiable: DoNotSchedule
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/name: payment-api
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: DoNotSchedule
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/name: payment-api
+
+# Prefer nodes that are not already running payment-api pods
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: payment-api
+          topologyKey: kubernetes.io/hostname
+
+# Tighten probe settings in prod — fail fast to get traffic off unhealthy pods quickly
+livenessProbe:
+  httpGet:
+    path: /actuator/health/liveness
+    port: 8080
+  initialDelaySeconds: 90
+  periodSeconds: 15
+  timeoutSeconds: 5
+  failureThreshold: 3
+  successThreshold: 1
+
+readinessProbe:
+  httpGet:
+    path: /actuator/health/readiness
+    port: 8080
+  initialDelaySeconds: 45
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+  successThreshold: 1
