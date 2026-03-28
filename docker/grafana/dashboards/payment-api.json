@@ -1,0 +1,242 @@
+{
+  "__inputs": [],
+  "__requires": [
+    { "type": "grafana", "id": "grafana", "name": "Grafana", "version": "10.0.0" },
+    { "type": "datasource", "id": "prometheus", "name": "Prometheus", "version": "1.0.0" }
+  ],
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "id": 100,
+      "title": "Business Metrics",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2 },
+          "unit": "ops"
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "failed" }, "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "completed" }, "properties": [{ "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }] }
+        ]
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 1 },
+      "id": 1,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "expr": "rate(payment_created_total[1m])", "legendFormat": "created", "refId": "A" },
+        { "expr": "rate(payment_completed_total[1m])", "legendFormat": "completed", "refId": "B" },
+        { "expr": "rate(payment_failed_total[1m])", "legendFormat": "failed", "refId": "C" },
+        { "expr": "rate(payment_cancelled_total[1m])", "legendFormat": "cancelled", "refId": "D" }
+      ],
+      "title": "Payment Rate (per second)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "thresholds" }, "unit": "short",
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null },
+            { "color": "yellow", "value": 10 },
+            { "color": "red", "value": 50 }
+          ]}
+        }
+      },
+      "gridPos": { "h": 4, "w": 3, "x": 12, "y": 1 },
+      "id": 2,
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "auto", "textMode": "auto", "colorMode": "background" },
+      "targets": [{ "expr": "increase(payment_created_total[1h])", "legendFormat": "Created (1h)", "refId": "A" }],
+      "title": "Payments Created (1h)",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "thresholds" }, "unit": "short",
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+        }
+      },
+      "gridPos": { "h": 4, "w": 3, "x": 15, "y": 1 },
+      "id": 3,
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [{ "expr": "increase(payment_completed_total[1h])", "legendFormat": "Completed (1h)", "refId": "A" }],
+      "title": "Payments Completed (1h)",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "thresholds" }, "unit": "short",
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null },
+            { "color": "red", "value": 1 }
+          ]}
+        }
+      },
+      "gridPos": { "h": 4, "w": 3, "x": 18, "y": 1 },
+      "id": 4,
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [{ "expr": "increase(payment_failed_total[1h])", "legendFormat": "Failed (1h)", "refId": "A" }],
+      "title": "Payment Failures (1h)",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "thresholds" }, "unit": "percentunit",
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "red", "value": null },
+            { "color": "yellow", "value": 0.9 },
+            { "color": "green", "value": 0.99 }
+          ]}
+        }
+      },
+      "gridPos": { "h": 4, "w": 3, "x": 21, "y": 1 },
+      "id": 5,
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [{ "expr": "rate(payment_completed_total[5m]) / clamp_min(rate(payment_created_total[5m]), 0.001)", "legendFormat": "Success rate", "refId": "A" }],
+      "title": "Payment Success Rate",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "thresholds" }, "unit": "short",
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+        }
+      },
+      "gridPos": { "h": 4, "w": 3, "x": 12, "y": 5 },
+      "id": 6,
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [{ "expr": "increase(payment_retried_total[1h])", "legendFormat": "Retried (1h)", "refId": "A" }],
+      "title": "Retries (1h)",
+      "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 9 },
+      "id": 101,
+      "title": "Performance",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "palette-classic" }, "unit": "s", "custom": { "lineWidth": 2 } }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 10 },
+      "id": 7,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "expr": "histogram_quantile(0.50, rate(payment_processing_duration_seconds_bucket[5m]))", "legendFormat": "p50", "refId": "A" },
+        { "expr": "histogram_quantile(0.95, rate(payment_processing_duration_seconds_bucket[5m]))", "legendFormat": "p95", "refId": "B" },
+        { "expr": "histogram_quantile(0.99, rate(payment_processing_duration_seconds_bucket[5m]))", "legendFormat": "p99", "refId": "C" }
+      ],
+      "title": "Payment Processing Latency",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "palette-classic" }, "unit": "reqps", "custom": { "lineWidth": 2 } }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 10 },
+      "id": 8,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "expr": "sum(rate(http_server_requests_seconds_count{uri=~\"/api/v1/payments.*\"}[1m])) by (method, uri, status)", "legendFormat": "{{method}} {{uri}} {{status}}", "refId": "A" }
+      ],
+      "title": "HTTP Request Rate (Payments API)",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 18 },
+      "id": 102,
+      "title": "JVM & Infrastructure",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "palette-classic" }, "unit": "bytes", "custom": { "lineWidth": 2 } }
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 19 },
+      "id": 9,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [
+        { "expr": "jvm_memory_used_bytes{area=\"heap\"}", "legendFormat": "Heap Used", "refId": "A" },
+        { "expr": "jvm_memory_max_bytes{area=\"heap\"}", "legendFormat": "Heap Max", "refId": "B" }
+      ],
+      "title": "JVM Heap Memory",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "palette-classic" }, "unit": "short", "custom": { "lineWidth": 2 } }
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 19 },
+      "id": 10,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [
+        { "expr": "jvm_threads_live_threads", "legendFormat": "Live Threads", "refId": "A" },
+        { "expr": "jvm_threads_daemon_threads", "legendFormat": "Daemon Threads", "refId": "B" }
+      ],
+      "title": "JVM Threads",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "palette-classic" }, "unit": "short", "custom": { "lineWidth": 2 } }
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 19 },
+      "id": 11,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [
+        { "expr": "hikaricp_connections_active", "legendFormat": "Active", "refId": "A" },
+        { "expr": "hikaricp_connections_idle", "legendFormat": "Idle", "refId": "B" },
+        { "expr": "hikaricp_connections_pending", "legendFormat": "Pending", "refId": "C" }
+      ],
+      "title": "HikariCP Connection Pool",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 38,
+  "tags": ["payment-api", "spring-boot"],
+  "templating": {
+    "list": [
+      {
+        "current": {},
+        "hide": 0,
+        "includeAll": false,
+        "name": "datasource",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "type": "datasource",
+        "label": "Datasource"
+      }
+    ]
+  },
+  "time": { "from": "now-1h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Payment API",
+  "uid": "payment-api-v1",
+  "version": 1
+}

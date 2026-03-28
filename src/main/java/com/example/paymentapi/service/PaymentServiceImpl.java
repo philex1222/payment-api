@@ -11,8 +11,10 @@ import com.example.paymentapi.exception.PaymentReversalException;
 import com.example.paymentapi.model.Payment;
 import com.example.paymentapi.model.PaymentStatus;
 import com.example.paymentapi.model.Transaction;
+import com.example.paymentapi.metrics.PaymentMetrics;
 import com.example.paymentapi.repository.PaymentRepository;
 import com.example.paymentapi.repository.PaymentSpecification;
+import io.micrometer.core.instrument.Timer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.cache.annotation.CacheEvict;
@@ -40,16 +42,19 @@ public class PaymentServiceImpl implements PaymentService {
     private final BankingAPIService bankingAPIService;
     private final CurrencyConversionService currencyConversionService;
     private final NotificationService notificationService;
+    private final PaymentMetrics paymentMetrics;
 
     public PaymentServiceImpl(PaymentRepository paymentRepository, TransactionService transactionService,
                               AuditService auditService, BankingAPIService bankingAPIService,
-                              CurrencyConversionService currencyConversionService, NotificationService notificationService) {
+                              CurrencyConversionService currencyConversionService,
+                              NotificationService notificationService, PaymentMetrics paymentMetrics) {
         this.paymentRepository = paymentRepository;
         this.transactionService = transactionService;
         this.auditService = auditService;
         this.bankingAPIService = bankingAPIService;
         this.currencyConversionService = currencyConversionService;
         this.notificationService = notificationService;
+        this.paymentMetrics = paymentMetrics;
     }
 
     @Override
@@ -59,6 +64,8 @@ public class PaymentServiceImpl implements PaymentService {
                 maskAccount(paymentRequest.getDestinationAccount()),
                 paymentRequest.getAmount(),
                 paymentRequest.getCurrency());
+        Timer.Sample timerSample = paymentMetrics.startTimer();
+        paymentMetrics.incrementCreated();
 
         // Validate source and destination accounts
         if (!bankingAPIService.validateAccount(paymentRequest.getSourceAccount())) {
@@ -119,6 +126,8 @@ public class PaymentServiceImpl implements PaymentService {
             // Update payment status to COMPLETED
             createdPayment.setStatus(PaymentStatus.COMPLETED.getCode());
             paymentRepository.save(createdPayment);
+            paymentMetrics.incrementCompleted();
+            paymentMetrics.stopTimer(timerSample);
             logger.info("Payment {} completed successfully", createdPayment.getId());
 
             // Update transaction status
@@ -136,6 +145,8 @@ public class PaymentServiceImpl implements PaymentService {
             logger.error("Payment {} failed: {}", createdPayment.getId(), e.getMessage());
             createdPayment.setStatus(PaymentStatus.FAILED.getCode());
             paymentRepository.save(createdPayment);
+            paymentMetrics.incrementFailed();
+            paymentMetrics.stopTimer(timerSample);
             transactionService.updateTransactionStatus(transactionId, "FAILED");
             transactionService.updateTransactionFailureReason(transactionId, e.getMessage());
             auditService.logPaymentEvent(createdPayment.getId(), "PAYMENT_FAILED");
@@ -370,6 +381,7 @@ public class PaymentServiceImpl implements PaymentService {
 
         payment.setStatus(PaymentStatus.CANCELLED.getCode());
         Payment updated = paymentRepository.save(payment);
+        paymentMetrics.incrementCancelled();
         auditService.logPaymentEvent(id, "PAYMENT_CANCELLED");
         logger.info("Payment {} cancelled successfully", id);
         return mapToResponse(updated);
@@ -387,6 +399,7 @@ public class PaymentServiceImpl implements PaymentService {
         }
 
         int attempt = payment.getRetryCount() + 1;
+        paymentMetrics.incrementRetried();
         logger.info("Retrying payment {} (attempt {})", id, attempt);
         auditService.logPaymentEvent(id, "PAYMENT_RETRY_ATTEMPT:" + attempt);
 
@@ -412,6 +425,7 @@ public class PaymentServiceImpl implements PaymentService {
             payment.setStatus(PaymentStatus.COMPLETED.getCode());
             paymentRepository.save(payment);
             transactionService.updateTransactionStatus(transaction.getId(), "SUCCESS");
+            paymentMetrics.incrementRetriedSuccess();
             auditService.logPaymentEvent(id, "PAYMENT_RETRY_SUCCEEDED");
             logger.info("Payment {} retry succeeded on attempt {}", id, attempt);
 

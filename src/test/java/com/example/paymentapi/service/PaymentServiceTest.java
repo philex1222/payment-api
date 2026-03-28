@@ -3,6 +3,8 @@ package com.example.paymentapi.service;
 import com.example.paymentapi.dto.PaymentRequest;
 import com.example.paymentapi.dto.PaymentResponse;
 import com.example.paymentapi.dto.ReversalRequest;
+import com.example.paymentapi.metrics.PaymentMetrics;
+import io.micrometer.core.instrument.Timer;
 import com.example.paymentapi.exception.InsufficientFundsException;
 import com.example.paymentapi.exception.InvalidAccountException;
 import com.example.paymentapi.exception.InvalidStatusTransitionException;
@@ -56,18 +58,23 @@ public class PaymentServiceTest {
     private CurrencyConversionService currencyConversionService;
     @Mock
     private NotificationService notificationService;
+    @Mock
+    private PaymentMetrics paymentMetrics;
 
     private PaymentServiceImpl paymentService;
 
     @BeforeEach
     void setUp() {
+        // lenient: startTimer() is only exercised by createPayment tests, not all test cases
+        lenient().when(paymentMetrics.startTimer()).thenReturn(Timer.start());
         paymentService = new PaymentServiceImpl(
                 paymentRepository,
                 transactionService,
                 auditService,
                 bankingAPIService,
                 currencyConversionService,
-                notificationService
+                notificationService,
+                paymentMetrics
         );
     }
 
