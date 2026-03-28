@@ -23,7 +23,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/auth")
+@RequestMapping("/api/v1/auth")
 @Tag(name = "Authentication", description = "Operations related to authentication")
 public class AuthController {
 
@@ -63,7 +63,7 @@ public class AuthController {
                     HttpStatus.UNAUTHORIZED.value(),
                     "Unauthorized",
                     "Invalid username or password",
-                    "/api/auth/login");
+                    "/api/v1/auth/login");
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(error);
 
         } catch (Exception e) {
@@ -72,7 +72,7 @@ public class AuthController {
                     HttpStatus.INTERNAL_SERVER_ERROR.value(),
                     "Internal Server Error",
                     "An error occurred during authentication",
-                    "/api/auth/login");
+                    "/api/v1/auth/login");
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
         }
     }

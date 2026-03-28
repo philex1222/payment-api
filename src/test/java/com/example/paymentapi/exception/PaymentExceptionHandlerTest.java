@@ -27,7 +27,7 @@ class PaymentExceptionHandlerTest {
     void setUp() {
         exceptionHandler = new PaymentExceptionHandler();
         MockHttpServletRequest request = new MockHttpServletRequest();
-        request.setRequestURI("/api/payments");
+        request.setRequestURI("/api/v1/payments");
         webRequest = new ServletWebRequest(request);
     }
 
@@ -210,7 +210,7 @@ class PaymentExceptionHandlerTest {
             ResponseEntity<ErrorResponse> response = exceptionHandler.handlePaymentNotFoundException(ex, webRequest);
 
             assertNotNull(response.getBody());
-            assertEquals("/api/payments", response.getBody().getPath());
+            assertEquals("/api/v1/payments", response.getBody().getPath());
         }
     }
 }

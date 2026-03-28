@@ -68,6 +68,45 @@ services:
       retries: 5
     restart: unless-stopped
 
+  # Prometheus — metrics scraping
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: payment-prometheus
+    volumes:
+      - ./docker/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=7d'
+      - '--web.enable-lifecycle'
+    ports:
+      - "9090:9090"
+    depends_on:
+      - app
+    networks:
+      - payment-network
+    restart: unless-stopped
+
+  # Grafana — metrics visualisation
+  grafana:
+    image: grafana/grafana:10.4.2
+    container_name: payment-grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    networks:
+      - payment-network
+    restart: unless-stopped
+
   # Zipkin distributed tracing UI & collector
   zipkin:
     image: openzipkin/zipkin:3
@@ -91,3 +130,5 @@ networks:
 volumes:
   mysql-data:
   redis-data:
+  prometheus-data:
+  grafana-data:

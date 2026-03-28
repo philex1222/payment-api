@@ -49,7 +49,7 @@ public class PaymentEndToEndTest {
         HttpEntity<LoginRequest> loginEntity = new HttpEntity<>(loginRequest, headers);
 
         ResponseEntity<LoginResponse> loginResponse = restTemplate.exchange(
-                baseUrl + "/api/auth/login",
+                baseUrl + "/api/v1/auth/login",
                 HttpMethod.POST,
                 loginEntity,
                 LoginResponse.class
@@ -82,7 +82,7 @@ public class PaymentEndToEndTest {
             headers.setContentType(MediaType.APPLICATION_JSON);
 
             ResponseEntity<LoginResponse> response = restTemplate.exchange(
-                    baseUrl + "/api/auth/login",
+                    baseUrl + "/api/v1/auth/login",
                     HttpMethod.POST,
                     new HttpEntity<>(loginRequest, headers),
                     LoginResponse.class
@@ -105,7 +105,7 @@ public class PaymentEndToEndTest {
             headers.setContentType(MediaType.APPLICATION_JSON);
 
             ResponseEntity<String> response = restTemplate.exchange(
-                    baseUrl + "/api/auth/login",
+                    baseUrl + "/api/v1/auth/login",
                     HttpMethod.POST,
                     new HttpEntity<>(loginRequest, headers),
                     String.class
@@ -132,7 +132,7 @@ public class PaymentEndToEndTest {
             request.setCurrency("USD");
 
             ResponseEntity<PaymentResponse> response = restTemplate.exchange(
-                    baseUrl + "/api/payments",
+                    baseUrl + "/api/v1/payments",
                     HttpMethod.POST,
                     new HttpEntity<>(request, createAuthHeaders()),
                     PaymentResponse.class
@@ -154,7 +154,7 @@ public class PaymentEndToEndTest {
             assertNotNull(createdPaymentId, "Payment must be created first");
 
             ResponseEntity<PaymentResponse> response = restTemplate.exchange(
-                    baseUrl + "/api/payments/" + createdPaymentId,
+                    baseUrl + "/api/v1/payments/" + createdPaymentId,
                     HttpMethod.GET,
                     new HttpEntity<>(createAuthHeaders()),
                     PaymentResponse.class
@@ -175,7 +175,7 @@ public class PaymentEndToEndTest {
             reversalRequest.setReason("E2E test reversal for refund processing");
 
             ResponseEntity<PaymentResponse> response = restTemplate.exchange(
-                    baseUrl + "/api/payments/" + createdPaymentId + "/reversal",
+                    baseUrl + "/api/v1/payments/" + createdPaymentId + "/reversal",
                     HttpMethod.POST,
                     new HttpEntity<>(reversalRequest, createAuthHeaders()),
                     PaymentResponse.class
@@ -193,7 +193,7 @@ public class PaymentEndToEndTest {
             assertNotNull(createdPaymentId, "Payment must be created first");
 
             ResponseEntity<PaymentResponse> response = restTemplate.exchange(
-                    baseUrl + "/api/payments/" + createdPaymentId,
+                    baseUrl + "/api/v1/payments/" + createdPaymentId,
                     HttpMethod.GET,
                     new HttpEntity<>(createAuthHeaders()),
                     PaymentResponse.class
@@ -219,7 +219,7 @@ public class PaymentEndToEndTest {
             request.setCurrency("USD");
 
             ResponseEntity<ErrorResponse> response = restTemplate.exchange(
-                    baseUrl + "/api/payments",
+                    baseUrl + "/api/v1/payments",
                     HttpMethod.POST,
                     new HttpEntity<>(request, createAuthHeaders()),
                     ErrorResponse.class
@@ -242,7 +242,7 @@ public class PaymentEndToEndTest {
             // No authorization header
 
             ResponseEntity<String> response = restTemplate.exchange(
-                    baseUrl + "/api/payments",
+                    baseUrl + "/api/v1/payments",
                     HttpMethod.POST,
                     new HttpEntity<>(request, headers),
                     String.class
@@ -261,7 +261,7 @@ public class PaymentEndToEndTest {
             request.setCurrency("USD");
 
             ResponseEntity<ErrorResponse> response = restTemplate.exchange(
-                    baseUrl + "/api/payments",
+                    baseUrl + "/api/v1/payments",
                     HttpMethod.POST,
                     new HttpEntity<>(request, createAuthHeaders()),
                     ErrorResponse.class
@@ -280,7 +280,7 @@ public class PaymentEndToEndTest {
             request.setCurrency("USD");
 
             ResponseEntity<String> response = restTemplate.exchange(
-                    baseUrl + "/api/payments",
+                    baseUrl + "/api/v1/payments",
                     HttpMethod.POST,
                     new HttpEntity<>(request, createAuthHeaders()),
                     String.class
@@ -298,7 +298,7 @@ public class PaymentEndToEndTest {
         @DisplayName("Should return 404 for non-existent payment")
         void testGetPayment_NotFound() {
             ResponseEntity<ErrorResponse> response = restTemplate.exchange(
-                    baseUrl + "/api/payments/non-existent-id-12345",
+                    baseUrl + "/api/v1/payments/non-existent-id-12345",
                     HttpMethod.GET,
                     new HttpEntity<>(createAuthHeaders()),
                     ErrorResponse.class
@@ -320,7 +320,7 @@ public class PaymentEndToEndTest {
             request.setCurrency("USD");
 
             ResponseEntity<PaymentResponse> createResponse = restTemplate.exchange(
-                    baseUrl + "/api/payments",
+                    baseUrl + "/api/v1/payments",
                     HttpMethod.POST,
                     new HttpEntity<>(request, createAuthHeaders()),
                     PaymentResponse.class
@@ -333,7 +333,7 @@ public class PaymentEndToEndTest {
             statusRequest.setStatus("PENDING");
 
             ResponseEntity<ErrorResponse> response = restTemplate.exchange(
-                    baseUrl + "/api/payments/" + paymentId + "/status",
+                    baseUrl + "/api/v1/payments/" + paymentId + "/status",
                     HttpMethod.PATCH,
                     new HttpEntity<>(statusRequest, createAuthHeaders()),
                     ErrorResponse.class
@@ -393,7 +393,7 @@ public class PaymentEndToEndTest {
                 request.setCurrency("USD");
 
                 ResponseEntity<PaymentResponse> response = restTemplate.exchange(
-                        baseUrl + "/api/payments",
+                        baseUrl + "/api/v1/payments",
                         HttpMethod.POST,
                         new HttpEntity<>(request, createAuthHeaders()),
                         PaymentResponse.class
@@ -404,7 +404,7 @@ public class PaymentEndToEndTest {
 
             // Retrieve all payments
             ResponseEntity<String> response = restTemplate.exchange(
-                    baseUrl + "/api/payments?page=0&size=10",
+                    baseUrl + "/api/v1/payments?page=0&size=10",
                     HttpMethod.GET,
                     new HttpEntity<>(createAuthHeaders()),
                     String.class
@@ -426,7 +426,7 @@ public class PaymentEndToEndTest {
             request.setCurrency("USD");
 
             restTemplate.exchange(
-                    baseUrl + "/api/payments",
+                    baseUrl + "/api/v1/payments",
                     HttpMethod.POST,
                     new HttpEntity<>(request, createAuthHeaders()),
                     PaymentResponse.class
@@ -434,7 +434,7 @@ public class PaymentEndToEndTest {
 
             // Get payments by source account
             ResponseEntity<String> response = restTemplate.exchange(
-                    baseUrl + "/api/payments/source-account?sourceAccount=1234567890",
+                    baseUrl + "/api/v1/payments/source-account?sourceAccount=1234567890",
                     HttpMethod.GET,
                     new HttpEntity<>(createAuthHeaders()),
                     String.class
@@ -459,7 +459,7 @@ public class PaymentEndToEndTest {
             request.setCurrency("USD");
 
             ResponseEntity<PaymentResponse> createResponse = restTemplate.exchange(
-                    baseUrl + "/api/payments",
+                    baseUrl + "/api/v1/payments",
                     HttpMethod.POST,
                     new HttpEntity<>(request, createAuthHeaders()),
                     PaymentResponse.class
@@ -474,7 +474,7 @@ public class PaymentEndToEndTest {
             reversalRequest.setReversalAmount(BigDecimal.valueOf(30));
 
             ResponseEntity<PaymentResponse> response = restTemplate.exchange(
-                    baseUrl + "/api/payments/" + paymentId + "/reversal",
+                    baseUrl + "/api/v1/payments/" + paymentId + "/reversal",
                     HttpMethod.POST,
                     new HttpEntity<>(reversalRequest, createAuthHeaders()),
                     PaymentResponse.class

@@ -53,7 +53,7 @@ public class SecurityConfig {
 
             // Authorization rules
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/api/auth/**").permitAll()
+                .requestMatchers("/api/v1/auth/**").permitAll()
                 .requestMatchers(
                     "/swagger-ui/**",
                     "/swagger-ui.html",
@@ -63,8 +63,8 @@ public class SecurityConfig {
                 ).permitAll()
                 .requestMatchers("/actuator/health", "/actuator/info").permitAll()
                 .requestMatchers("/actuator/**").hasRole("ADMIN")
-                .requestMatchers("/api/payments/**").hasRole("USER")
-                .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                .requestMatchers("/api/v1/payments/**").hasRole("USER")
+                .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                 .anyRequest().authenticated()
             )
 

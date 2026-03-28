@@ -60,7 +60,7 @@ class AuthControllerTest {
         when(authenticationManager.authenticate(any())).thenReturn(auth);
         when(jwtTokenProvider.generateToken(auth)).thenReturn("mock-jwt-token");
 
-        mockMvc.perform(post("/api/auth/login")
+        mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new LoginRequest("admin", "password"))))
                 .andExpect(status().isOk())
@@ -74,7 +74,7 @@ class AuthControllerTest {
         when(authenticationManager.authenticate(any()))
                 .thenThrow(new BadCredentialsException("Bad credentials"));
 
-        mockMvc.perform(post("/api/auth/login")
+        mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new LoginRequest("admin", "wrong"))))
                 .andExpect(status().isUnauthorized())
@@ -87,7 +87,7 @@ class AuthControllerTest {
     void login_missingUsername_returns400() throws Exception {
         when(rateLimitInterceptor.preHandle(any(), any(), any())).thenReturn(true);
 
-        mockMvc.perform(post("/api/auth/login")
+        mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"password\":\"secret\"}"))
                 .andExpect(status().isBadRequest());
@@ -98,7 +98,7 @@ class AuthControllerTest {
     void login_missingPassword_returns400() throws Exception {
         when(rateLimitInterceptor.preHandle(any(), any(), any())).thenReturn(true);
 
-        mockMvc.perform(post("/api/auth/login")
+        mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"username\":\"admin\"}"))
                 .andExpect(status().isBadRequest());
@@ -109,7 +109,7 @@ class AuthControllerTest {
     void login_emptyBody_returns400() throws Exception {
         when(rateLimitInterceptor.preHandle(any(), any(), any())).thenReturn(true);
 
-        mockMvc.perform(post("/api/auth/login")
+        mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
                 .andExpect(status().isBadRequest());

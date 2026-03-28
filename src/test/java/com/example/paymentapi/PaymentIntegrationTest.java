@@ -55,7 +55,7 @@ public class PaymentIntegrationTest {
         loginRequest.setUsername("admin");
         loginRequest.setPassword("password");
 
-        String loginResponseJson = mockMvc.perform(post("/api/auth/login")
+        String loginResponseJson = mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(loginRequest)))
                 .andExpect(status().isOk())
@@ -76,7 +76,7 @@ public class PaymentIntegrationTest {
             loginRequest.setUsername("admin");
             loginRequest.setPassword("password");
 
-            mockMvc.perform(post("/api/auth/login")
+            mockMvc.perform(post("/api/v1/auth/login")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(loginRequest)))
                     .andExpect(status().isOk())
@@ -91,7 +91,7 @@ public class PaymentIntegrationTest {
             loginRequest.setUsername("admin");
             loginRequest.setPassword("wrongpassword");
 
-            int status = mockMvc.perform(post("/api/auth/login")
+            int status = mockMvc.perform(post("/api/v1/auth/login")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(loginRequest)))
                     .andReturn().getResponse().getStatus();
@@ -109,7 +109,7 @@ public class PaymentIntegrationTest {
             loginRequest.setUsername("nonexistent");
             loginRequest.setPassword("password");
 
-            int status = mockMvc.perform(post("/api/auth/login")
+            int status = mockMvc.perform(post("/api/v1/auth/login")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(loginRequest)))
                     .andReturn().getResponse().getStatus();
@@ -130,7 +130,7 @@ public class PaymentIntegrationTest {
         void testCreatePayment_Success() throws Exception {
             PaymentRequest request = createValidPaymentRequest();
 
-            mockMvc.perform(post("/api/payments")
+            mockMvc.perform(post("/api/v1/payments")
                             .contentType(MediaType.APPLICATION_JSON)
                             .header("Authorization", authToken)
                             .content(objectMapper.writeValueAsString(request)))
@@ -145,7 +145,7 @@ public class PaymentIntegrationTest {
         void testCreatePayment_Unauthorized() throws Exception {
             PaymentRequest request = createValidPaymentRequest();
 
-            mockMvc.perform(post("/api/payments")
+            mockMvc.perform(post("/api/v1/payments")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isForbidden());
@@ -156,7 +156,7 @@ public class PaymentIntegrationTest {
         void testCreatePayment_InvalidToken() throws Exception {
             PaymentRequest request = createValidPaymentRequest();
 
-            mockMvc.perform(post("/api/payments")
+            mockMvc.perform(post("/api/v1/payments")
                             .contentType(MediaType.APPLICATION_JSON)
                             .header("Authorization", "Bearer invalid-token")
                             .content(objectMapper.writeValueAsString(request)))
@@ -168,7 +168,7 @@ public class PaymentIntegrationTest {
         void testCreatePayment_MissingFields() throws Exception {
             PaymentRequest request = new PaymentRequest();
 
-            mockMvc.perform(post("/api/payments")
+            mockMvc.perform(post("/api/v1/payments")
                             .contentType(MediaType.APPLICATION_JSON)
                             .header("Authorization", authToken)
                             .content(objectMapper.writeValueAsString(request)))
@@ -181,7 +181,7 @@ public class PaymentIntegrationTest {
             PaymentRequest request = createValidPaymentRequest();
             request.setAmount(BigDecimal.valueOf(-100));
 
-            mockMvc.perform(post("/api/payments")
+            mockMvc.perform(post("/api/v1/payments")
                             .contentType(MediaType.APPLICATION_JSON)
                             .header("Authorization", authToken)
                             .content(objectMapper.writeValueAsString(request)))
@@ -194,7 +194,7 @@ public class PaymentIntegrationTest {
             PaymentRequest request = createValidPaymentRequest();
             request.setSourceAccount("invalid");
 
-            mockMvc.perform(post("/api/payments")
+            mockMvc.perform(post("/api/v1/payments")
                             .contentType(MediaType.APPLICATION_JSON)
                             .header("Authorization", authToken)
                             .content(objectMapper.writeValueAsString(request)))
@@ -207,7 +207,7 @@ public class PaymentIntegrationTest {
             PaymentRequest request = createValidPaymentRequest();
             request.setDestinationAccount(request.getSourceAccount());
 
-            mockMvc.perform(post("/api/payments")
+            mockMvc.perform(post("/api/v1/payments")
                             .contentType(MediaType.APPLICATION_JSON)
                             .header("Authorization", authToken)
                             .content(objectMapper.writeValueAsString(request)))
@@ -225,7 +225,7 @@ public class PaymentIntegrationTest {
             // First create a payment
             String paymentId = createPaymentAndGetId();
 
-            mockMvc.perform(get("/api/payments/" + paymentId)
+            mockMvc.perform(get("/api/v1/payments/" + paymentId)
                             .header("Authorization", authToken))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.id").value(paymentId))
@@ -235,7 +235,7 @@ public class PaymentIntegrationTest {
         @Test
         @DisplayName("Should return 404 for non-existent payment")
         void testGetPaymentById_NotFound() throws Exception {
-            mockMvc.perform(get("/api/payments/non-existent-id")
+            mockMvc.perform(get("/api/v1/payments/non-existent-id")
                             .header("Authorization", authToken))
                     .andExpect(status().isNotFound());
         }
@@ -247,7 +247,7 @@ public class PaymentIntegrationTest {
             createPaymentAndGetId();
             createPaymentAndGetId();
 
-            mockMvc.perform(get("/api/payments")
+            mockMvc.perform(get("/api/v1/payments")
                             .header("Authorization", authToken)
                             .param("page", "0")
                             .param("size", "10"))
@@ -261,7 +261,7 @@ public class PaymentIntegrationTest {
         void testGetPaymentsBySourceAccount() throws Exception {
             createPaymentAndGetId();
 
-            mockMvc.perform(get("/api/payments/source-account")
+            mockMvc.perform(get("/api/v1/payments/source-account")
                             .header("Authorization", authToken)
                             .param("sourceAccount", "1234567890"))
                     .andExpect(status().isOk())
@@ -273,7 +273,7 @@ public class PaymentIntegrationTest {
         void testGetPaymentsByDestinationAccount() throws Exception {
             createPaymentAndGetId();
 
-            mockMvc.perform(get("/api/payments/destination-account")
+            mockMvc.perform(get("/api/v1/payments/destination-account")
                             .header("Authorization", authToken)
                             .param("destinationAccount", "0987654321"))
                     .andExpect(status().isOk())
@@ -295,7 +295,7 @@ public class PaymentIntegrationTest {
             PaymentStatusRequest statusRequest = new PaymentStatusRequest();
             statusRequest.setStatus("REVERSED");
 
-            mockMvc.perform(patch("/api/payments/" + paymentId + "/status")
+            mockMvc.perform(patch("/api/v1/payments/" + paymentId + "/status")
                             .contentType(MediaType.APPLICATION_JSON)
                             .header("Authorization", authToken)
                             .content(objectMapper.writeValueAsString(statusRequest)))
@@ -312,7 +312,7 @@ public class PaymentIntegrationTest {
             PaymentStatusRequest statusRequest = new PaymentStatusRequest();
             statusRequest.setStatus("PENDING");
 
-            mockMvc.perform(patch("/api/payments/" + paymentId + "/status")
+            mockMvc.perform(patch("/api/v1/payments/" + paymentId + "/status")
                             .contentType(MediaType.APPLICATION_JSON)
                             .header("Authorization", authToken)
                             .content(objectMapper.writeValueAsString(statusRequest)))
@@ -329,7 +329,7 @@ public class PaymentIntegrationTest {
         void testDeletePayment_CompletedPayment() throws Exception {
             String paymentId = createPaymentAndGetId();
 
-            mockMvc.perform(delete("/api/payments/" + paymentId)
+            mockMvc.perform(delete("/api/v1/payments/" + paymentId)
                             .header("Authorization", authToken))
                     .andExpect(status().isConflict());
         }
@@ -337,7 +337,7 @@ public class PaymentIntegrationTest {
         @Test
         @DisplayName("Should return 404 for non-existent payment")
         void testDeletePayment_NotFound() throws Exception {
-            mockMvc.perform(delete("/api/payments/non-existent-id")
+            mockMvc.perform(delete("/api/v1/payments/non-existent-id")
                             .header("Authorization", authToken))
                     .andExpect(status().isNotFound());
         }
@@ -355,7 +355,7 @@ public class PaymentIntegrationTest {
             ReversalRequest reversalRequest = new ReversalRequest();
             reversalRequest.setReason("Customer requested refund for this payment");
 
-            mockMvc.perform(post("/api/payments/" + paymentId + "/reversal")
+            mockMvc.perform(post("/api/v1/payments/" + paymentId + "/reversal")
                             .contentType(MediaType.APPLICATION_JSON)
                             .header("Authorization", authToken)
                             .header("X-Api-Key", "test-api-key")
@@ -372,7 +372,7 @@ public class PaymentIntegrationTest {
             ReversalRequest reversalRequest = new ReversalRequest();
             // No reason set
 
-            mockMvc.perform(post("/api/payments/" + paymentId + "/reversal")
+            mockMvc.perform(post("/api/v1/payments/" + paymentId + "/reversal")
                             .contentType(MediaType.APPLICATION_JSON)
                             .header("Authorization", authToken)
                             .header("X-Api-Key", "test-api-key")
@@ -390,7 +390,7 @@ public class PaymentIntegrationTest {
             reversalRequest.setPartialReversal(true);
             reversalRequest.setReversalAmount(BigDecimal.valueOf(50));
 
-            mockMvc.perform(post("/api/payments/" + paymentId + "/reversal")
+            mockMvc.perform(post("/api/v1/payments/" + paymentId + "/reversal")
                             .contentType(MediaType.APPLICATION_JSON)
                             .header("Authorization", authToken)
                             .header("X-Api-Key", "test-api-key")
@@ -442,7 +442,7 @@ public class PaymentIntegrationTest {
     private String createPaymentAndGetId() throws Exception {
         PaymentRequest request = createValidPaymentRequest();
 
-        MvcResult result = mockMvc.perform(post("/api/payments")
+        MvcResult result = mockMvc.perform(post("/api/v1/payments")
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", authToken)
                         .content(objectMapper.writeValueAsString(request)))

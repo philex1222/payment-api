@@ -64,7 +64,7 @@ public class PaymentControllerTest {
         loginRequest.setUsername("admin");
         loginRequest.setPassword("password");
 
-        String loginResponseJson = mockMvc.perform(post("/api/auth/login")
+        String loginResponseJson = mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(loginRequest)))
                 .andExpect(status().isOk())
@@ -89,7 +89,7 @@ public class PaymentControllerTest {
 
         when(paymentService.createPayment(any(PaymentRequest.class))).thenReturn(paymentResponse);
 
-        mockMvc.perform(post("/api/payments")
+        mockMvc.perform(post("/api/v1/payments")
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", token)
                         .content(objectMapper.writeValueAsString(paymentRequest)))
@@ -107,7 +107,7 @@ public class PaymentControllerTest {
 
         when(paymentService.getPaymentById("payment123")).thenReturn(paymentResponse);
 
-        mockMvc.perform(get("/api/payments/payment123")
+        mockMvc.perform(get("/api/v1/payments/payment123")
                         .header("Authorization", token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value("payment123"))
@@ -119,7 +119,7 @@ public class PaymentControllerTest {
         PaymentRequest paymentRequest = new PaymentRequest();
         // Missing required fields
 
-        mockMvc.perform(post("/api/payments")
+        mockMvc.perform(post("/api/v1/payments")
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", token)
                         .content(objectMapper.writeValueAsString(paymentRequest)))
@@ -142,7 +142,7 @@ public class PaymentControllerTest {
         when(idempotencyService.get("key-abc")).thenReturn(Optional.empty());
         when(paymentService.createPayment(any(PaymentRequest.class))).thenReturn(paymentResponse);
 
-        mockMvc.perform(post("/api/payments")
+        mockMvc.perform(post("/api/v1/payments")
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", token)
                         .header(IDEMPOTENCY_KEY_HEADER, "key-abc")
@@ -168,7 +168,7 @@ public class PaymentControllerTest {
 
         when(idempotencyService.get("key-abc")).thenReturn(Optional.of(cached));
 
-        mockMvc.perform(post("/api/payments")
+        mockMvc.perform(post("/api/v1/payments")
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", token)
                         .header(IDEMPOTENCY_KEY_HEADER, "key-abc")
@@ -195,7 +195,7 @@ public class PaymentControllerTest {
 
         when(paymentService.createPayment(any(PaymentRequest.class))).thenReturn(paymentResponse);
 
-        mockMvc.perform(post("/api/payments")
+        mockMvc.perform(post("/api/v1/payments")
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", token)
                         .content(objectMapper.writeValueAsString(paymentRequest)))
@@ -216,7 +216,7 @@ public class PaymentControllerTest {
         when(paymentService.getPayments(isNull(), isNull(), isNull(), any()))
                 .thenReturn(new PageImpl<>(List.of(p), PageRequest.of(0, 10), 1));
 
-        mockMvc.perform(get("/api/payments")
+        mockMvc.perform(get("/api/v1/payments")
                         .header("Authorization", token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].id").value("p1"));
@@ -227,7 +227,7 @@ public class PaymentControllerTest {
         when(paymentService.getPayments(eq("FAILED"), isNull(), isNull(), any()))
                 .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 10), 0));
 
-        mockMvc.perform(get("/api/payments?status=FAILED")
+        mockMvc.perform(get("/api/v1/payments?status=FAILED")
                         .header("Authorization", token))
                 .andExpect(status().isOk());
 
@@ -243,7 +243,7 @@ public class PaymentControllerTest {
 
         when(paymentService.cancelPayment("pay-1")).thenReturn(cancelled);
 
-        mockMvc.perform(post("/api/payments/pay-1/cancel")
+        mockMvc.perform(post("/api/v1/payments/pay-1/cancel")
                         .header("Authorization", token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("CANCELLED"));
