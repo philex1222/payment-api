@@ -123,7 +123,22 @@ jobs:
       - name: Checkout source code
         uses: actions/checkout@v4
 
+      - name: Check cluster credentials
+        id: check-cluster
+        env:
+          KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
+        run: |
+          if [ -z "$KUBE_CONFIG" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "### Staging Deployment — Skipped" >> "$GITHUB_STEP_SUMMARY"
+            echo "⚠️ \`KUBE_CONFIG\` secret not set in the **staging** environment." >> "$GITHUB_STEP_SUMMARY"
+            echo "Add a base64-encoded kubeconfig to enable Kubernetes deployments." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Install Helm
+        if: steps.check-cluster.outputs.configured == 'true'
         uses: azure/setup-helm@v4
         with:
           version: "3.16.3"
@@ -132,6 +147,7 @@ jobs:
       # Set KUBE_CONFIG secret in the GitHub "staging" environment with the
       # base64-encoded kubeconfig for the staging cluster.
       - name: Configure kubectl
+        if: steps.check-cluster.outputs.configured == 'true'
         env:
           KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
         run: |
@@ -140,15 +156,17 @@ jobs:
           chmod 600 "$HOME/.kube/config"
 
       - name: Create GHCR pull secret (idempotent)
+        if: steps.check-cluster.outputs.configured == 'true'
         run: |
           kubectl create secret docker-registry ghcr-pull-secret \
             --docker-server=ghcr.io \
             --docker-username="${{ github.actor }}" \
             --docker-password="${{ secrets.GITHUB_TOKEN }}" \
             --namespace=payment-staging \
-            --dry-run=client -o yaml | kubectl apply -f -
+            --dry-run=client -o yaml | kubectl apply --validate=false -f -
 
       - name: Helm diff (dry-run preview)
+        if: steps.check-cluster.outputs.configured == 'true'
         # Requires the helm-diff plugin; install it once per runner environment.
         # If the plugin is not available the step is skipped gracefully.
         continue-on-error: true
@@ -165,6 +183,7 @@ jobs:
           echo '```' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Helm upgrade — Staging
+        if: steps.check-cluster.outputs.configured == 'true'
         run: |
           helm upgrade --install payment-api ./helm/payment-api \
             -f helm/payment-api/values-staging.yaml \
@@ -177,12 +196,14 @@ jobs:
             --history-max 5
 
       - name: Verify rollout
+        if: steps.check-cluster.outputs.configured == 'true'
         run: |
           kubectl rollout status deployment/payment-api \
             --namespace payment-staging \
             --timeout=5m
 
       - name: Write staging deployment summary
+        if: steps.check-cluster.outputs.configured == 'true'
         run: |
           echo "### Staging Deployment" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
@@ -215,12 +236,28 @@ jobs:
       - name: Checkout source code
         uses: actions/checkout@v4
 
+      - name: Check cluster credentials
+        id: check-cluster
+        env:
+          KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
+        run: |
+          if [ -z "$KUBE_CONFIG" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "### Production Deployment — Skipped" >> "$GITHUB_STEP_SUMMARY"
+            echo "⚠️ \`KUBE_CONFIG\` secret not set in the **production** environment." >> "$GITHUB_STEP_SUMMARY"
+            echo "Add a base64-encoded kubeconfig to enable Kubernetes deployments." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Install Helm
+        if: steps.check-cluster.outputs.configured == 'true'
         uses: azure/setup-helm@v4
         with:
           version: "3.16.3"
 
       - name: Configure kubectl
+        if: steps.check-cluster.outputs.configured == 'true'
         env:
           KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
         run: |
@@ -229,15 +266,17 @@ jobs:
           chmod 600 "$HOME/.kube/config"
 
       - name: Create GHCR pull secret (idempotent)
+        if: steps.check-cluster.outputs.configured == 'true'
         run: |
           kubectl create secret docker-registry ghcr-pull-secret \
             --docker-server=ghcr.io \
             --docker-username="${{ github.actor }}" \
             --docker-password="${{ secrets.GITHUB_TOKEN }}" \
             --namespace=payment-prod \
-            --dry-run=client -o yaml | kubectl apply -f -
+            --dry-run=client -o yaml | kubectl apply --validate=false -f -
 
       - name: Helm diff (dry-run preview)
+        if: steps.check-cluster.outputs.configured == 'true'
         continue-on-error: true
         run: |
           helm plugin install https://github.com/databus23/helm-diff --version 3.9.9 2>/dev/null || true
@@ -252,6 +291,7 @@ jobs:
           echo '```' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Helm upgrade — Production
+        if: steps.check-cluster.outputs.configured == 'true'
         run: |
           helm upgrade --install payment-api ./helm/payment-api \
             -f helm/payment-api/values-prod.yaml \
@@ -264,12 +304,14 @@ jobs:
             --history-max 5
 
       - name: Verify rollout
+        if: steps.check-cluster.outputs.configured == 'true'
         run: |
           kubectl rollout status deployment/payment-api \
             --namespace payment-prod \
             --timeout=5m
 
       - name: Write production deployment summary
+        if: steps.check-cluster.outputs.configured == 'true'
         run: |
           echo "### Production Deployment" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
