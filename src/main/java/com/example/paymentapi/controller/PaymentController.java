@@ -4,7 +4,6 @@ import com.example.paymentapi.dto.PaymentRequest;
 import com.example.paymentapi.dto.PaymentResponse;
 import com.example.paymentapi.dto.PaymentStatusRequest;
 import com.example.paymentapi.dto.ReversalRequest;
-import com.example.paymentapi.model.Payment;
 import com.example.paymentapi.service.IdempotencyService;
 import com.example.paymentapi.service.PaymentService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -15,11 +14,13 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -84,13 +85,21 @@ public class PaymentController {
     }
 
     @GetMapping
-    @Operation(summary = "Get all payments (paginated)")
+    @Operation(summary = "Get payments (paginated + filtered)",
+               description = "All filter params are optional. Combine freely: ?status=FAILED&dateFrom=2026-01-01T00:00:00")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Payments retrieved successfully"),
         @ApiResponse(responseCode = "500", description = "Internal server error")
     })
-    public ResponseEntity<Page<Payment>> getPayments(Pageable pageable) {
-        return ResponseEntity.ok(paymentService.getPayments(pageable));
+    public ResponseEntity<Page<PaymentResponse>> getPayments(
+            @Parameter(description = "Filter by status (PENDING, PROCESSING, COMPLETED, FAILED, CANCELLED, REVERSED, REFUNDED)")
+            @RequestParam(required = false) String status,
+            @Parameter(description = "Filter by creation date — from (ISO-8601, e.g. 2026-01-01T00:00:00)")
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime dateFrom,
+            @Parameter(description = "Filter by creation date — to (ISO-8601, e.g. 2026-12-31T23:59:59)")
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime dateTo,
+            Pageable pageable) {
+        return ResponseEntity.ok(paymentService.getPayments(status, dateFrom, dateTo, pageable));
     }
 
     @GetMapping("/source-account")
@@ -99,7 +108,7 @@ public class PaymentController {
         @ApiResponse(responseCode = "200", description = "Payments retrieved successfully"),
         @ApiResponse(responseCode = "500", description = "Internal server error")
     })
-    public ResponseEntity<List<Payment>> getPaymentsBySourceAccount(
+    public ResponseEntity<List<PaymentResponse>> getPaymentsBySourceAccount(
             @Parameter(description = "Source account number", required = true)
             @RequestParam String sourceAccount) {
         return ResponseEntity.ok(paymentService.getPaymentsBySourceAccount(sourceAccount));
@@ -111,7 +120,7 @@ public class PaymentController {
         @ApiResponse(responseCode = "200", description = "Payments retrieved successfully"),
         @ApiResponse(responseCode = "500", description = "Internal server error")
     })
-    public ResponseEntity<List<Payment>> getPaymentsByDestinationAccount(
+    public ResponseEntity<List<PaymentResponse>> getPaymentsByDestinationAccount(
             @Parameter(description = "Destination account number", required = true)
             @RequestParam String destinationAccount) {
         return ResponseEntity.ok(paymentService.getPaymentsByDestinationAccount(destinationAccount));
@@ -130,6 +139,21 @@ public class PaymentController {
             @PathVariable String id,
             @Valid @RequestBody PaymentStatusRequest request) {
         return ResponseEntity.ok(paymentService.updatePaymentStatus(id, request.getStatus()));
+    }
+
+    @PostMapping("/{id}/cancel")
+    @Operation(summary = "Cancel a payment",
+               description = "Only PENDING payments can be cancelled. Returns 409 for any other status.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Payment cancelled successfully"),
+        @ApiResponse(responseCode = "404", description = "Payment not found"),
+        @ApiResponse(responseCode = "409", description = "Payment cannot be cancelled in its current status"),
+        @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    public ResponseEntity<PaymentResponse> cancelPayment(
+            @Parameter(description = "Payment UUID", required = true)
+            @PathVariable String id) {
+        return ResponseEntity.ok(paymentService.cancelPayment(id));
     }
 
     @DeleteMapping("/{id}")

@@ -251,9 +251,10 @@ public class PaymentServiceTest {
             Page<Payment> page = new PageImpl<>(payments);
             Pageable pageable = PageRequest.of(0, 10);
 
-            when(paymentRepository.findAll(pageable)).thenReturn(page);
+            when(paymentRepository.findAll(any(org.springframework.data.jpa.domain.Specification.class), eq(pageable)))
+                    .thenReturn(page);
 
-            Page<Payment> result = paymentService.getPayments(pageable);
+            Page<PaymentResponse> result = paymentService.getPayments(null, null, null, pageable);
 
             assertNotNull(result);
             assertEquals(2, result.getTotalElements());
@@ -265,9 +266,10 @@ public class PaymentServiceTest {
             Page<Payment> emptyPage = new PageImpl<>(Collections.emptyList());
             Pageable pageable = PageRequest.of(0, 10);
 
-            when(paymentRepository.findAll(pageable)).thenReturn(emptyPage);
+            when(paymentRepository.findAll(any(org.springframework.data.jpa.domain.Specification.class), eq(pageable)))
+                    .thenReturn(emptyPage);
 
-            Page<Payment> result = paymentService.getPayments(pageable);
+            Page<PaymentResponse> result = paymentService.getPayments(null, null, null, pageable);
 
             assertNotNull(result);
             assertEquals(0, result.getTotalElements());
@@ -282,7 +284,7 @@ public class PaymentServiceTest {
             );
             when(paymentRepository.findBySourceAccount("1234567890")).thenReturn(payments);
 
-            List<Payment> result = paymentService.getPaymentsBySourceAccount("1234567890");
+            List<PaymentResponse> result = paymentService.getPaymentsBySourceAccount("1234567890");
 
             assertEquals(2, result.size());
         }
@@ -293,7 +295,7 @@ public class PaymentServiceTest {
             List<Payment> payments = Collections.singletonList(createPayment("p1", "COMPLETED"));
             when(paymentRepository.findByDestinationAccount("0987654321")).thenReturn(payments);
 
-            List<Payment> result = paymentService.getPaymentsByDestinationAccount("0987654321");
+            List<PaymentResponse> result = paymentService.getPaymentsByDestinationAccount("0987654321");
 
             assertEquals(1, result.size());
         }
@@ -408,7 +410,7 @@ public class PaymentServiceTest {
             assertThrows(IllegalStateException.class,
                     () -> paymentService.deletePayment("payment123"));
 
-            verify(paymentRepository, never()).delete(any());
+            verify(paymentRepository, never()).delete(any(Payment.class));
         }
 
         @Test
@@ -428,7 +430,7 @@ public class PaymentServiceTest {
             when(paymentRepository.findById("payment123")).thenReturn(Optional.of(payment));
 
             assertDoesNotThrow(() -> paymentService.deletePayment("payment123"));
-            verify(paymentRepository).delete(payment);
+            verify(paymentRepository).delete(any(Payment.class));
         }
     }
 

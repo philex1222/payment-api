@@ -124,6 +124,13 @@
             <artifactId>resilience4j-retry</artifactId>
         </dependency>
 
+        <!-- Structured JSON logging (Logstash-compatible encoder for ELK / Grafana Loki) -->
+        <dependency>
+            <groupId>net.logstash.logback</groupId>
+            <artifactId>logstash-logback-encoder</artifactId>
+            <version>8.0</version>
+        </dependency>
+
         <!-- Flyway database migrations (flyway-mysql required for Flyway 10+) -->
         <dependency>
             <groupId>org.flywaydb</groupId>

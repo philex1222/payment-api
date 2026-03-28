@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mvn compile:*)",
+      "Bash(mvn test-compile:*)",
+      "Bash(mvn test:*)",
+      "Bash(mvn verify:*)",
+      "Bash(python3 -c \":*)",
+      "Bash(grep -r \"Contract\\\\|Pact\" C:UsersxphilDesktopPhilipWorkspacepayment-api --include=*.java --include=*.xml)",
+      "Bash(gh run:*)",
+      "Bash(grep -v \"^$\")",
+      "Bash(gh api:*)",
+      "Bash(mvn --batch-mode --no-transfer-progress clean verify -Dspring.profiles.active=test)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(docker-compose logs:*)",
+      "Bash(curl -s \"https://search.maven.org/solrsearch/select?q=g:org.springdoc+AND+a:springdoc-openapi-starter-webmvc-ui&rows=5&wt=json\")",
+      "Bash(python -c \"import sys,json; data=json.load\\(sys.stdin\\); [print\\(d[''''latestVersion'''']\\) for d in data[''''response''''][''''docs'''']]\")",
+      "Bash(curl -s https://repo1.maven.org/maven2/org/springdoc/springdoc-openapi-starter-webmvc-ui/maven-metadata.xml)",
+      "Bash(docker exec:*)",
+      "Bash(cd:*)",
+      "Bash(./mvnw test:*)"
+    ]
+  }
+}

@@ -45,4 +45,7 @@ public class Payment {
     @LastModifiedDate
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
+
+    @Column(name = "retry_count", nullable = false)
+    private int retryCount = 0;
 }

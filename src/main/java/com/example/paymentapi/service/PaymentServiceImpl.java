@@ -12,17 +12,21 @@ import com.example.paymentapi.model.Payment;
 import com.example.paymentapi.model.PaymentStatus;
 import com.example.paymentapi.model.Transaction;
 import com.example.paymentapi.repository.PaymentRepository;
+import com.example.paymentapi.repository.PaymentSpecification;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 @Transactional
@@ -169,24 +173,36 @@ public class PaymentServiceImpl implements PaymentService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<Payment> getPayments(Pageable pageable) {
-        logger.debug("Retrieving payments with pagination: page={}, size={}",
-                pageable.getPageNumber(), pageable.getPageSize());
-        return paymentRepository.findAll(pageable);
+    public Page<PaymentResponse> getPayments(String status, LocalDateTime dateFrom, LocalDateTime dateTo, Pageable pageable) {
+        logger.debug("Retrieving payments: status={}, dateFrom={}, dateTo={}, page={}, size={}",
+                status, dateFrom, dateTo, pageable.getPageNumber(), pageable.getPageSize());
+        Specification<Payment> spec = Specification.where(null);
+        if (status != null && !status.isBlank()) {
+            spec = spec.and(PaymentSpecification.hasStatus(status));
+        }
+        if (dateFrom != null) {
+            spec = spec.and(PaymentSpecification.createdAfter(dateFrom));
+        }
+        if (dateTo != null) {
+            spec = spec.and(PaymentSpecification.createdBefore(dateTo));
+        }
+        return paymentRepository.findAll(spec, pageable).map(this::mapToResponse);
     }
 
     @Override
     @Transactional(readOnly = true)
-    public List<Payment> getPaymentsBySourceAccount(String sourceAccount) {
+    public List<PaymentResponse> getPaymentsBySourceAccount(String sourceAccount) {
         logger.debug("Retrieving payments by source account: {}", maskAccount(sourceAccount));
-        return paymentRepository.findBySourceAccount(sourceAccount);
+        return paymentRepository.findBySourceAccount(sourceAccount)
+                .stream().map(this::mapToResponse).collect(Collectors.toList());
     }
 
     @Override
     @Transactional(readOnly = true)
-    public List<Payment> getPaymentsByDestinationAccount(String destinationAccount) {
+    public List<PaymentResponse> getPaymentsByDestinationAccount(String destinationAccount) {
         logger.debug("Retrieving payments by destination account: {}", maskAccount(destinationAccount));
-        return paymentRepository.findByDestinationAccount(destinationAccount);
+        return paymentRepository.findByDestinationAccount(destinationAccount)
+                .stream().map(this::mapToResponse).collect(Collectors.toList());
     }
 
     @Override
@@ -337,6 +353,81 @@ public class PaymentServiceImpl implements PaymentService {
             auditService.logPaymentEvent(payment.getId(), "PAYMENT_REVERSAL_FAILED:" + e.getMessage());
             throw new PaymentReversalException(id, "Failed to process reversal: " + e.getMessage(), e);
         }
+    }
+
+    @Override
+    @CacheEvict(value = "payments", key = "#id")
+    public PaymentResponse cancelPayment(String id) {
+        logger.info("Cancelling payment: {}", id);
+        Payment payment = paymentRepository.findById(id)
+                .orElseThrow(() -> new PaymentNotFoundException("Payment not found with ID: " + id));
+
+        PaymentStatus currentStatus = PaymentStatus.fromString(payment.getStatus());
+        if (currentStatus != PaymentStatus.PENDING) {
+            logger.warn("Cannot cancel payment {} with status {}", id, currentStatus.getCode());
+            throw new InvalidStatusTransitionException(id, currentStatus, PaymentStatus.CANCELLED);
+        }
+
+        payment.setStatus(PaymentStatus.CANCELLED.getCode());
+        Payment updated = paymentRepository.save(payment);
+        auditService.logPaymentEvent(id, "PAYMENT_CANCELLED");
+        logger.info("Payment {} cancelled successfully", id);
+        return mapToResponse(updated);
+    }
+
+    @Override
+    @CacheEvict(value = "payments", key = "#id")
+    public PaymentResponse retryPayment(String id) {
+        Payment payment = paymentRepository.findById(id)
+                .orElseThrow(() -> new PaymentNotFoundException("Payment not found with ID: " + id));
+
+        PaymentStatus currentStatus = PaymentStatus.fromString(payment.getStatus());
+        if (currentStatus != PaymentStatus.FAILED) {
+            throw new InvalidStatusTransitionException(id, currentStatus, PaymentStatus.PENDING);
+        }
+
+        int attempt = payment.getRetryCount() + 1;
+        logger.info("Retrying payment {} (attempt {})", id, attempt);
+        auditService.logPaymentEvent(id, "PAYMENT_RETRY_ATTEMPT:" + attempt);
+
+        payment.setStatus(PaymentStatus.PENDING.getCode());
+        paymentRepository.save(payment);
+
+        try {
+            if (!bankingAPIService.validateAccount(payment.getSourceAccount())
+                    || !bankingAPIService.validateAccount(payment.getDestinationAccount())) {
+                throw new InvalidAccountException("Account validation failed during retry");
+            }
+            if (!bankingAPIService.hasSufficientFunds(payment.getSourceAccount(), payment.getAmount())) {
+                throw new InsufficientFundsException("Insufficient funds during retry");
+            }
+
+            Transaction transaction = transactionService.createTransaction(payment.getId());
+            payment.setStatus(PaymentStatus.PROCESSING.getCode());
+            paymentRepository.save(payment);
+
+            bankingAPIService.transferFunds(
+                    payment.getSourceAccount(), payment.getDestinationAccount(), payment.getAmount());
+
+            payment.setStatus(PaymentStatus.COMPLETED.getCode());
+            paymentRepository.save(payment);
+            transactionService.updateTransactionStatus(transaction.getId(), "SUCCESS");
+            auditService.logPaymentEvent(id, "PAYMENT_RETRY_SUCCEEDED");
+            logger.info("Payment {} retry succeeded on attempt {}", id, attempt);
+
+            notificationService.sendPaymentNotification(
+                    getAccountEmail(payment.getSourceAccount()),
+                    "Retried payment completed. Amount: " + payment.getAmount() + " " + payment.getCurrency());
+
+        } catch (Exception e) {
+            payment.setStatus(PaymentStatus.FAILED.getCode());
+            payment.setRetryCount(attempt);
+            paymentRepository.save(payment);
+            auditService.logPaymentEvent(id, "PAYMENT_RETRY_FAILED:" + e.getMessage());
+            logger.warn("Payment {} retry failed on attempt {}: {}", id, attempt, e.getMessage());
+        }
+
+        return mapToResponse(paymentRepository.findById(id).orElseThrow());
     }
 
     /**

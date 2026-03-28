@@ -23,9 +23,16 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Optional;
 
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+
+import java.time.LocalDateTime;
+import java.util.List;
+
 import static com.example.paymentapi.controller.PaymentController.IDEMPOTENCY_KEY_HEADER;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -195,8 +202,50 @@ public class PaymentControllerTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").value("payment456"));
 
-        // No idempotency lookup when header is absent
         verify(idempotencyService, never()).get(any());
         verify(idempotencyService, never()).store(any(), any());
+    }
+
+    @Test
+    public void testGetPayments_noFilters_returnsPage() throws Exception {
+        PaymentResponse p = new PaymentResponse();
+        p.setId("p1");
+        p.setStatus("COMPLETED");
+        p.setCreatedAt(LocalDateTime.now());
+
+        when(paymentService.getPayments(isNull(), isNull(), isNull(), any()))
+                .thenReturn(new PageImpl<>(List.of(p), PageRequest.of(0, 10), 1));
+
+        mockMvc.perform(get("/api/payments")
+                        .header("Authorization", token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].id").value("p1"));
+    }
+
+    @Test
+    public void testGetPayments_withStatusFilter_passesFilterToService() throws Exception {
+        when(paymentService.getPayments(eq("FAILED"), isNull(), isNull(), any()))
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 10), 0));
+
+        mockMvc.perform(get("/api/payments?status=FAILED")
+                        .header("Authorization", token))
+                .andExpect(status().isOk());
+
+        verify(paymentService).getPayments(eq("FAILED"), isNull(), isNull(), any());
+    }
+
+    @Test
+    public void testCancelPayment_pendingPayment_returns200() throws Exception {
+        PaymentResponse cancelled = new PaymentResponse();
+        cancelled.setId("pay-1");
+        cancelled.setStatus("CANCELLED");
+        cancelled.setCreatedAt(LocalDateTime.now());
+
+        when(paymentService.cancelPayment("pay-1")).thenReturn(cancelled);
+
+        mockMvc.perform(post("/api/payments/pay-1/cancel")
+                        .header("Authorization", token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CANCELLED"));
     }
 }

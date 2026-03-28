@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+
+    <!--
+        Structured JSON logging via logstash-logback-encoder.
+
+        Active profiles:
+          - "test"     → plain-text console (human-readable in CI logs)
+          - everything else → JSON console (parseable by ELK / Grafana Loki)
+
+        MDC fields automatically included in every JSON event:
+          traceId, spanId, correlationId
+    -->
+
+    <!-- ── JSON appender (all non-test profiles) ──────────────────────────── -->
+    <springProfile name="!test">
+        <appender name="JSON_CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+                <!-- Service identity fields -->
+                <customFields>{"service":"payment-api","environment":"${SPRING_PROFILES_ACTIVE:-local}"}</customFields>
+                <!-- Include MDC tracing fields as top-level JSON keys -->
+                <includeMdcKeyName>traceId</includeMdcKeyName>
+                <includeMdcKeyName>spanId</includeMdcKeyName>
+                <includeMdcKeyName>correlationId</includeMdcKeyName>
+                <!-- Shorten logger name for readability -->
+                <shortenedLoggerNameLength>36</shortenedLoggerNameLength>
+                <!-- Include caller info only for WARN+ to limit overhead -->
+                <includeCallerData>false</includeCallerData>
+            </encoder>
+        </appender>
+
+        <root level="INFO">
+            <appender-ref ref="JSON_CONSOLE"/>
+        </root>
+
+        <!-- Reduce noise from framework internals -->
+        <logger name="org.springframework" level="WARN"/>
+        <logger name="org.hibernate"       level="WARN"/>
+        <logger name="com.zaxxer.hikari"   level="WARN"/>
+        <logger name="io.lettuce"          level="WARN"/>
+
+        <!-- Application logs at INFO by default; override via LOGGING_LEVEL_* env vars -->
+        <logger name="com.example.paymentapi" level="INFO"/>
+    </springProfile>
+
+    <!-- ── Plain-text appender (test profile only) ────────────────────────── -->
+    <springProfile name="test">
+        <appender name="PLAIN_CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder>
+                <pattern>%d{HH:mm:ss.SSS} %-5level [%X{correlationId:-}] %logger{36} - %msg%n</pattern>
+            </encoder>
+        </appender>
+
+        <root level="WARN">
+            <appender-ref ref="PLAIN_CONSOLE"/>
+        </root>
+
+        <logger name="com.example.paymentapi" level="DEBUG"/>
+    </springProfile>
+
+</configuration>
