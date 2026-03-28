@@ -247,6 +247,27 @@ env:
         name: payment-api-config
         key: jwt.expiration.ms
 
+  # Zipkin tracing endpoint — must point at the in-cluster Zipkin service
+  - name: ZIPKIN_ENDPOINT
+    valueFrom:
+      configMapKeyRef:
+        name: payment-api-config
+        key: zipkin.endpoint
+
+  # Log file path — must match the volume mount in extraVolumeMounts
+  - name: LOGGING_FILE_PATH
+    valueFrom:
+      configMapKeyRef:
+        name: payment-api-config
+        key: logging.file.path
+
+  # Tracing sample rate — override per environment (1.0 dev, 0.1 prod)
+  - name: MANAGEMENT_TRACING_SAMPLING_PROBABILITY
+    valueFrom:
+      configMapKeyRef:
+        name: payment-api-config
+        key: tracing.sampling.probability
+
 # =============================================================================
 # ConfigMap data — mirrors application.properties non-secret values
 # =============================================================================
@@ -260,6 +281,10 @@ configMap:
     rate-limit.timeout: "1000"
     logging.level.root: "INFO"
     logging.level.com.example.paymentapi: "INFO"
+    # Must match the mountPath in extraVolumeMounts
+    logging.file.path: "/var/log/payment-api"
+    zipkin.endpoint: "http://zipkin:9411/api/v2/spans"
+    tracing.sampling.probability: "1.0"
 
 # =============================================================================
 # Lifecycle hooks — graceful shutdown

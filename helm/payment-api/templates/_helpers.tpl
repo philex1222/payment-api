@@ -63,7 +63,13 @@ ServiceAccount name.
 
 {{/*
 Image reference — repository:tag.
+image.tag MUST be set explicitly at deploy time (--set image.tag=sha-<shortsha>).
+Falling back to Chart.AppVersion is unsafe because the SNAPSHOT tag will not
+exist in GHCR and the pods will enter ImagePullBackOff.
 */}}
 {{- define "payment-api.image" -}}
-{{- printf "%s:%s" .Values.image.repository (.Values.image.tag | default .Chart.AppVersion) }}
+{{- if not .Values.image.tag }}
+  {{- fail "image.tag must be set explicitly — e.g. --set image.tag=sha-abc1234. Do not leave it empty." }}
+{{- end }}
+{{- printf "%s:%s" .Values.image.repository .Values.image.tag }}
 {{- end }}

@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # Payment API Application
   app:
@@ -16,7 +14,7 @@ services:
       - SPRING_DATASOURCE_PASSWORD=password
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - JWT_SECRET=your-super-secret-jwt-key-that-should-be-at-least-256-bits-long
+      - JWT_SECRET=${JWT_SECRET}
       - JWT_EXPIRATION=86400000
       - ZIPKIN_ENDPOINT=http://zipkin:9411/api/v2/spans
     depends_on:
@@ -24,8 +22,10 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      # Zipkin is optional — tracing is non-critical so a slow Zipkin start
+      # should not block the app from coming up.
       zipkin:
-        condition: service_healthy
+        condition: service_started
     networks:
       - payment-network
     restart: unless-stopped

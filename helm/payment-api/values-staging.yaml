@@ -76,6 +76,24 @@ env:
         name: payment-api-config
         key: jwt.expiration.ms
 
+  - name: ZIPKIN_ENDPOINT
+    valueFrom:
+      configMapKeyRef:
+        name: payment-api-config
+        key: zipkin.endpoint
+
+  - name: LOGGING_FILE_PATH
+    valueFrom:
+      configMapKeyRef:
+        name: payment-api-config
+        key: logging.file.path
+
+  - name: MANAGEMENT_TRACING_SAMPLING_PROBABILITY
+    valueFrom:
+      configMapKeyRef:
+        name: payment-api-config
+        key: tracing.sampling.probability
+
 resources:
   requests:
     memory: "512Mi"
@@ -121,6 +139,9 @@ configMap:
     rate-limit.timeout: "1000"
     logging.level.root: "INFO"
     logging.level.com.example.paymentapi: "INFO"
+    logging.file.path: "/var/log/payment-api"
+    zipkin.endpoint: "http://zipkin.observability.svc.cluster.local:9411/api/v2/spans"
+    tracing.sampling.probability: "1.0"
 
 topologySpreadConstraints:
   - maxSkew: 1

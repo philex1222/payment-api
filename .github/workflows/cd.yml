@@ -115,6 +115,10 @@ jobs:
       (github.event_name == 'workflow_dispatch' &&
        (github.event.inputs.environment == 'staging' || github.event.inputs.environment == 'production'))
 
+    outputs:
+      # 'true' only when KUBE_CONFIG was set and kubectl/helm steps actually ran
+      deployed: ${{ steps.check-cluster.outputs.configured }}
+
     environment:
       name: staging
       url: ${{ vars.STAGING_URL }}
@@ -161,7 +165,7 @@ jobs:
           kubectl create secret docker-registry ghcr-pull-secret \
             --docker-server=ghcr.io \
             --docker-username="${{ github.actor }}" \
-            --docker-password="${{ secrets.GITHUB_TOKEN }}" \
+            --docker-password="${{ secrets.GHCR_PAT }}" \
             --namespace=payment-staging \
             --dry-run=client -o yaml | kubectl apply --validate=false -f -
 
@@ -216,17 +220,20 @@ jobs:
           echo "| Triggered by | ${{ github.actor }} |" >> "$GITHUB_STEP_SUMMARY"
 
   # ── 3. Deploy to Production ─────────────────────────────────────────────────
-  # The `production` GitHub Environment must have required reviewers configured:
-  #   Repo Settings → Environments → production → Required reviewers
+  # Production deploys are MANUAL ONLY (workflow_dispatch) and require:
+  #   1. The workflow was explicitly triggered with environment=production
+  #   2. Staging was actually deployed (KUBE_CONFIG was set in staging env)
+  #   3. Required reviewers approved in the `production` GitHub Environment:
+  #      Repo Settings → Environments → production → Required reviewers
   deploy-production:
     name: Deploy to Production
     runs-on: ubuntu-latest
     needs: [publish-image, deploy-staging]
     timeout-minutes: 15
     if: >
-      github.event_name == 'push' ||
-      (github.event_name == 'workflow_dispatch' &&
-       github.event.inputs.environment == 'production')
+      github.event_name == 'workflow_dispatch' &&
+      github.event.inputs.environment == 'production' &&
+      needs.deploy-staging.outputs.deployed == 'true'
 
     environment:
       name: production
@@ -271,7 +278,7 @@ jobs:
           kubectl create secret docker-registry ghcr-pull-secret \
             --docker-server=ghcr.io \
             --docker-username="${{ github.actor }}" \
-            --docker-password="${{ secrets.GITHUB_TOKEN }}" \
+            --docker-password="${{ secrets.GHCR_PAT }}" \
             --namespace=payment-prod \
             --dry-run=client -o yaml | kubectl apply --validate=false -f -
 

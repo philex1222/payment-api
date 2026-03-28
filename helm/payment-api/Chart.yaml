@@ -3,7 +3,7 @@ name: payment-api
 description: Spring Boot 3 Payment Processing API — includes MySQL, Redis, JWT auth, Resilience4j circuit breaker, and Prometheus metrics.
 type: application
 version: 0.1.0
-appVersion: "0.0.1-SNAPSHOT"
+appVersion: "latest"
 
 keywords:
   - payment

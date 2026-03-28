@@ -78,6 +78,24 @@ env:
         name: payment-api-config
         key: jwt.expiration.ms
 
+  - name: ZIPKIN_ENDPOINT
+    valueFrom:
+      configMapKeyRef:
+        name: payment-api-config
+        key: zipkin.endpoint
+
+  - name: LOGGING_FILE_PATH
+    valueFrom:
+      configMapKeyRef:
+        name: payment-api-config
+        key: logging.file.path
+
+  - name: MANAGEMENT_TRACING_SAMPLING_PROBABILITY
+    valueFrom:
+      configMapKeyRef:
+        name: payment-api-config
+        key: tracing.sampling.probability
+
 # Production-sized pods: more CPU headroom for payment processing bursts
 resources:
   requests:
@@ -130,6 +148,10 @@ configMap:
     rate-limit.timeout: "1000"
     logging.level.root: "WARN"
     logging.level.com.example.paymentapi: "INFO"
+    logging.file.path: "/var/log/payment-api"
+    zipkin.endpoint: "http://zipkin.observability.svc.cluster.local:9411/api/v2/spans"
+    # 10% sampling in production — reduce trace volume at scale
+    tracing.sampling.probability: "0.1"
 
 # Spread pods across all availability zones
 topologySpreadConstraints:
