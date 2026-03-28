@@ -14,8 +14,8 @@ services:
       - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/payment_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       - SPRING_DATASOURCE_USERNAME=root
       - SPRING_DATASOURCE_PASSWORD=password
-      - SPRING_REDIS_HOST=redis
-      - SPRING_REDIS_PORT=6379
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
       - JWT_SECRET=your-super-secret-jwt-key-that-should-be-at-least-256-bits-long
       - JWT_EXPIRATION=86400000
       - ZIPKIN_ENDPOINT=http://zipkin:9411/api/v2/spans
