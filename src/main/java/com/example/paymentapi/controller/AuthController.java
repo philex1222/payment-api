@@ -45,7 +45,7 @@ public class AuthController {
         @ApiResponse(responseCode = "401", description = "Invalid credentials"),
         @ApiResponse(responseCode = "500", description = "Internal server error")
     })
-    public ResponseEntity<?> login(@Valid @RequestBody LoginRequest loginRequest) {
+    public ResponseEntity<Object> login(@Valid @RequestBody LoginRequest loginRequest) {
         try {
             logger.debug("Attempting login for user: {}", loginRequest.getUsername());
 

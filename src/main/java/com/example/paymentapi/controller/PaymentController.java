@@ -10,6 +10,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
@@ -18,6 +19,7 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
@@ -26,7 +28,9 @@ import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/v1/payments")
+@PreAuthorize("hasRole('USER')")
 @Tag(name = "Payments", description = "Operations related to payment processing")
+@SecurityRequirement(name = "bearerAuth")
 public class PaymentController {
 
     static final String IDEMPOTENCY_KEY_HEADER = "Idempotency-Key";

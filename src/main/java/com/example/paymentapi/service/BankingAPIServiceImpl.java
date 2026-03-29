@@ -36,6 +36,7 @@ public class BankingAPIServiceImpl implements BankingAPIService {
 
     @Override
     @CircuitBreaker(name = CB_NAME, fallbackMethod = "validateAccountFallback")
+    @Retry(name = CB_NAME)
     public boolean validateAccount(String accountNumber) {
         logger.debug("Validating account: {}", maskAccount(accountNumber));
 
@@ -63,6 +64,7 @@ public class BankingAPIServiceImpl implements BankingAPIService {
 
     @Override
     @CircuitBreaker(name = CB_NAME, fallbackMethod = "hasSufficientFundsFallback")
+    @Retry(name = CB_NAME)
     public boolean hasSufficientFunds(String accountNumber, BigDecimal amount) {
         logger.debug("Checking funds for account {}: requested amount {}",
                 maskAccount(accountNumber), amount);
@@ -99,20 +101,24 @@ public class BankingAPIServiceImpl implements BankingAPIService {
             throw new IllegalArgumentException("Transfer amount must be positive");
         }
 
-        synchronized (this) {
-            BigDecimal sourceBalance = getAccountBalance(sourceAccount);
-            if (sourceBalance.compareTo(amount) < 0) {
-                logger.error("Transfer failed: insufficient funds in source account {}",
-                        maskAccount(sourceAccount));
-                throw new IllegalStateException("Insufficient funds for transfer");
-            }
-
-            deductFunds(sourceAccount, amount);
-            addFunds(destinationAccount, amount);
-
-            logger.info("Transfer completed: {} -> {}, amount: {}",
-                    maskAccount(sourceAccount), maskAccount(destinationAccount), amount);
+        // ConcurrentHashMap.compute() is atomic per-key, so no outer lock is required.
+        // An outer synchronized(this) would cause thread-pinning under Java virtual threads.
+        // We perform a speculative balance check before deducting: if the check passes but
+        // another thread drains the account before compute() runs, the compute lambda
+        // performs a final guard and throws. This is safe for this in-memory simulation;
+        // a real integration would rely on the banking system's own ACID transaction.
+        BigDecimal sourceBalance = getAccountBalance(sourceAccount);
+        if (sourceBalance.compareTo(amount) < 0) {
+            logger.error("Transfer failed: insufficient funds in source account {}",
+                    maskAccount(sourceAccount));
+            throw new IllegalStateException("Insufficient funds for transfer");
         }
+
+        deductFunds(sourceAccount, amount);
+        addFunds(destinationAccount, amount);
+
+        logger.info("Transfer completed: {} -> {}, amount: {}",
+                maskAccount(sourceAccount), maskAccount(destinationAccount), amount);
     }
 
     @SuppressWarnings("unused")

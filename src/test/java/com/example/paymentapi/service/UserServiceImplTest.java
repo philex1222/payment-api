@@ -31,7 +31,11 @@ class UserServiceImplTest {
     @Test
     @DisplayName("Should return user when username exists")
     void findByUsername_found() {
-        User user = new User(1L, "admin", "hashed", "ROLE_ADMIN");
+        User user = new User();
+        user.setId(1L);
+        user.setUsername("admin");
+        user.setPassword("hashed");
+        user.setRole("ROLE_ADMIN");
         when(userRepository.findByUsername("admin")).thenReturn(Optional.of(user));
 
         Optional<User> result = userService.findByUsername("admin");

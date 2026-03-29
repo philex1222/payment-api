@@ -14,13 +14,18 @@ import java.util.List;
  * Service for sending notifications to users.
  * This is a simulated implementation for development/testing purposes.
  * In production, this would integrate with email/SMS providers.
+ *
+ * The in-memory notification store is capped at {@value #MAX_STORED_NOTIFICATIONS}
+ * entries to prevent unbounded memory growth in long-running deployments.
+ * A real implementation would not store notifications in-process.
  */
 @Service
 public class NotificationService {
 
     private static final Logger logger = LoggerFactory.getLogger(NotificationService.class);
+    private static final int MAX_STORED_NOTIFICATIONS = 1000;
 
-    // Store sent notifications for testing/verification purposes
+    // Bounded in-memory store — capped to prevent memory leak in long-running instances
     private final List<NotificationRecord> sentNotifications = Collections.synchronizedList(new ArrayList<>());
 
     /**
@@ -39,29 +44,14 @@ public class NotificationService {
             simulateNotificationSend(recipient, message);
 
             // Record the notification
-            NotificationRecord record = new NotificationRecord(
-                    recipient,
-                    message,
-                    LocalDateTime.now(),
-                    NotificationType.PAYMENT,
-                    true
-            );
-            sentNotifications.add(record);
-
+            recordNotification(new NotificationRecord(
+                    recipient, message, LocalDateTime.now(), NotificationType.PAYMENT, true));
             logger.debug("Notification sent successfully to {}", maskRecipient(recipient));
 
         } catch (Exception e) {
             logger.error("Failed to send notification to {}: {}", maskRecipient(recipient), e.getMessage());
-
-            // Record the failed notification
-            NotificationRecord record = new NotificationRecord(
-                    recipient,
-                    message,
-                    LocalDateTime.now(),
-                    NotificationType.PAYMENT,
-                    false
-            );
-            sentNotifications.add(record);
+            recordNotification(new NotificationRecord(
+                    recipient, message, LocalDateTime.now(), NotificationType.PAYMENT, false));
         }
     }
 
@@ -70,15 +60,21 @@ public class NotificationService {
      */
     public void sendAlertNotification(String recipient, String subject, String message) {
         logger.warn("ALERT to {}: {} - {}", maskRecipient(recipient), subject, summarizeMessage(message));
+        recordNotification(new NotificationRecord(
+                recipient, subject + ": " + message, LocalDateTime.now(), NotificationType.ALERT, true));
+    }
 
-        NotificationRecord record = new NotificationRecord(
-                recipient,
-                subject + ": " + message,
-                LocalDateTime.now(),
-                NotificationType.ALERT,
-                true
-        );
-        sentNotifications.add(record);
+    /**
+     * Adds a notification record to the bounded store.
+     * Drops the oldest entry when the cap is reached.
+     */
+    private void recordNotification(NotificationRecord record) {
+        synchronized (sentNotifications) {
+            if (sentNotifications.size() >= MAX_STORED_NOTIFICATIONS) {
+                sentNotifications.remove(0);
+            }
+            sentNotifications.add(record);
+        }
     }
 
     /**

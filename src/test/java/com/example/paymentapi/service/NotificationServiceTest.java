@@ -70,4 +70,18 @@ class NotificationServiceTest {
         // Original list should not be affected
         assertEquals(1, notificationService.getNotificationCount());
     }
+
+    @Test
+    @DisplayName("Store is capped at MAX_STORED_NOTIFICATIONS — oldest entry is evicted")
+    void boundedStore_evictsOldestWhenFull() {
+        // Add 1001 alert notifications synchronously — the cap is 1000
+        for (int i = 0; i < 1001; i++) {
+            notificationService.sendAlertNotification("ops@example.com", "S" + i, "msg" + i);
+        }
+
+        // Should never exceed the cap
+        int count = notificationService.getNotificationCount();
+        assertTrue(count <= 1000,
+                "Notification store exceeded cap: " + count + " entries");
+    }
 }

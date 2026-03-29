@@ -1,17 +1,24 @@
 package com.example.paymentapi.model;
 
-import lombok.AllArgsConstructor;
-import lombok.Data;
+import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 import jakarta.persistence.*;
+import java.util.Objects;
 
-@Data
+/**
+ * JPA entity representing an application user.
+ * Uses @Getter/@Setter to avoid @Data's broken equals/hashCode on JPA entities.
+ * Password field is intentionally excluded from toString() to prevent PII leakage.
+ */
+@Getter
+@Setter
 @NoArgsConstructor
-@AllArgsConstructor
 @Entity
 @Table(name = "users")
 public class User {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -24,4 +31,21 @@ public class User {
 
     @Column(nullable = false)
     private String role;
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof User other)) return false;
+        return id != null && id.equals(other.id);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(id);
+    }
+
+    @Override
+    public String toString() {
+        return "User{id=" + id + ", username='" + username + "', role='" + role + "'}";
+    }
 }

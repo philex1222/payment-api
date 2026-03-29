@@ -17,6 +17,7 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
+import org.slf4j.MDC;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -175,7 +176,12 @@ public class PaymentExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGenericException(
             Exception ex, WebRequest request) {
-        String traceId = UUID.randomUUID().toString();
+        // Prefer the Micrometer/Brave traceId already injected into MDC by the
+        // tracing bridge; fall back to a new UUID only if tracing is disabled.
+        String traceId = MDC.get("traceId");
+        if (traceId == null || traceId.isBlank()) {
+            traceId = UUID.randomUUID().toString();
+        }
         logger.error("Unexpected error [traceId={}]: {}", traceId, ex.getMessage(), ex);
         ErrorResponse error = createErrorResponse(
                 HttpStatus.INTERNAL_SERVER_ERROR, "Internal Server Error",

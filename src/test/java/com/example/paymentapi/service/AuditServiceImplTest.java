@@ -14,8 +14,8 @@ import java.time.LocalDateTime;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
+import static org.assertj.core.api.Assertions.assertThatCode;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("AuditServiceImpl Tests")
@@ -72,5 +72,19 @@ class AuditServiceImplTest {
         ArgumentCaptor<AuditLog> captor = ArgumentCaptor.forClass(AuditLog.class);
         verify(auditLogRepository).save(captor.capture());
         assertEquals(detailedEvent, captor.getValue().getEvent());
+    }
+
+    @Test
+    @DisplayName("Should swallow exceptions from the repository and not propagate them")
+    void logPaymentEvent_repositoryThrows_doesNotPropagate() {
+        // A repository failure (e.g. DB temporarily unavailable) must never
+        // propagate out of logPaymentEvent and disrupt the calling payment transaction.
+        when(auditLogRepository.save(any(AuditLog.class)))
+                .thenThrow(new RuntimeException("DB connection lost"));
+
+        assertThatCode(() -> auditService.logPaymentEvent("payment-004", "PAYMENT_CREATED"))
+                .doesNotThrowAnyException();
+
+        verify(auditLogRepository).save(any(AuditLog.class));
     }
 }
