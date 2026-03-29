@@ -28,7 +28,7 @@ import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/v1/payments")
-@PreAuthorize("hasRole('USER')")
+@PreAuthorize("hasAnyRole('USER', 'ADMIN')")
 @Tag(name = "Payments", description = "Operations related to payment processing")
 @SecurityRequirement(name = "bearerAuth")
 public class PaymentController {

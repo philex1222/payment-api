@@ -21,7 +21,7 @@ public class TestConfig {
     @Bean
     @Primary
     public CacheManager testCacheManager() {
-        return new ConcurrentMapCacheManager("payments");
+        return new ConcurrentMapCacheManager("payments", "users");
     }
 
     @Bean

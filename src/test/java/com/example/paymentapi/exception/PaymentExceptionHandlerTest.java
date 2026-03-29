@@ -8,9 +8,11 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.validation.BeanPropertyBindingResult;
 import org.springframework.validation.FieldError;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.context.request.ServletWebRequest;
 import org.springframework.web.context.request.WebRequest;
@@ -184,6 +186,66 @@ class PaymentExceptionHandlerTest {
             assertNotNull(response.getBody());
             assertNotNull(response.getBody().getTraceId());
             assertFalse(response.getBody().getTraceId().isEmpty());
+        }
+    }
+
+    @Nested
+    @DisplayName("HttpMessageNotReadableException Handler Tests")
+    class HttpMessageNotReadableExceptionTests {
+
+        @Test
+        @DisplayName("Should return 400 BAD_REQUEST for malformed JSON body")
+        void testHandleHttpMessageNotReadable() {
+            HttpMessageNotReadableException ex = new HttpMessageNotReadableException("Malformed JSON");
+
+            ResponseEntity<ErrorResponse> response = exceptionHandler.handleHttpMessageNotReadable(ex, webRequest);
+
+            assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+            assertNotNull(response.getBody());
+            assertEquals(400, response.getBody().getStatus());
+            assertEquals("Malformed Request", response.getBody().getError());
+            assertEquals("Request body is missing or contains invalid JSON", response.getBody().getMessage());
+        }
+
+        @Test
+        @DisplayName("Should include request path in response")
+        void testHandleHttpMessageNotReadable_HasPath() {
+            HttpMessageNotReadableException ex = new HttpMessageNotReadableException("Missing body");
+
+            ResponseEntity<ErrorResponse> response = exceptionHandler.handleHttpMessageNotReadable(ex, webRequest);
+
+            assertNotNull(response.getBody());
+            assertEquals("/api/v1/payments", response.getBody().getPath());
+        }
+    }
+
+    @Nested
+    @DisplayName("HttpRequestMethodNotSupportedException Handler Tests")
+    class HttpRequestMethodNotSupportedExceptionTests {
+
+        @Test
+        @DisplayName("Should return 405 METHOD_NOT_ALLOWED for unsupported HTTP method")
+        void testHandleMethodNotSupported() {
+            HttpRequestMethodNotSupportedException ex = new HttpRequestMethodNotSupportedException("DELETE");
+
+            ResponseEntity<ErrorResponse> response = exceptionHandler.handleMethodNotSupported(ex, webRequest);
+
+            assertEquals(HttpStatus.METHOD_NOT_ALLOWED, response.getStatusCode());
+            assertNotNull(response.getBody());
+            assertEquals(405, response.getBody().getStatus());
+            assertEquals("Method Not Allowed", response.getBody().getError());
+            assertTrue(response.getBody().getMessage().contains("DELETE"));
+        }
+
+        @Test
+        @DisplayName("Should include the unsupported method name in the error message")
+        void testHandleMethodNotSupported_MessageContainsMethod() {
+            HttpRequestMethodNotSupportedException ex = new HttpRequestMethodNotSupportedException("PATCH");
+
+            ResponseEntity<ErrorResponse> response = exceptionHandler.handleMethodNotSupported(ex, webRequest);
+
+            assertNotNull(response.getBody());
+            assertTrue(response.getBody().getMessage().contains("PATCH"));
         }
     }
 

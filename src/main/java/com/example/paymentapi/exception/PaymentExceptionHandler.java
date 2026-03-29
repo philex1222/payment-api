@@ -7,6 +7,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -143,6 +145,26 @@ public class PaymentExceptionHandler {
         ErrorResponse error = createErrorResponse(
                 HttpStatus.BAD_REQUEST, "Type Mismatch", message, request);
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ErrorResponse> handleHttpMessageNotReadable(
+            HttpMessageNotReadableException ex, WebRequest request) {
+        logger.warn("Malformed JSON request: {}", ex.getMessage());
+        ErrorResponse error = createErrorResponse(
+                HttpStatus.BAD_REQUEST, "Malformed Request",
+                "Request body is missing or contains invalid JSON", request);
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+    }
+
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ErrorResponse> handleMethodNotSupported(
+            HttpRequestMethodNotSupportedException ex, WebRequest request) {
+        logger.warn("Method not allowed: {}", ex.getMessage());
+        ErrorResponse error = createErrorResponse(
+                HttpStatus.METHOD_NOT_ALLOWED, "Method Not Allowed",
+                String.format("HTTP method '%s' is not supported for this endpoint", ex.getMethod()), request);
+        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED).body(error);
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

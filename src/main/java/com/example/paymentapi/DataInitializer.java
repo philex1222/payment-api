@@ -29,7 +29,9 @@ public class DataInitializer implements CommandLineRunner {
             User user = new User();
             user.setUsername("admin");
             user.setPassword(passwordEncoder.encode("password"));
-            user.setRole("ROLE_USER");
+            // ROLE_ADMIN grants access to payment endpoints (hasAnyRole USER/ADMIN)
+            // plus actuator and /api/v1/admin/** endpoints
+            user.setRole("ROLE_ADMIN");
 
             userRepository.save(user);
             logger.info("Created default admin user");
