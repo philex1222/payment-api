@@ -22,14 +22,14 @@ COPY src ./src
 RUN mvn package --batch-mode --no-transfer-progress -DskipTests -q
 
 # ── Stage 2: Extract layers ───────────────────────────────────────────────────
-FROM eclipse-temurin:17-jre-alpine AS layers
+FROM eclipse-temurin:25-jre-alpine AS layers
 WORKDIR /app
 COPY --from=build /app/target/*.jar app.jar
 # Spring Boot 3's layertools extracts the JAR into well-separated directories
 RUN java -Djarmode=layertools -jar app.jar extract
 
 # ── Stage 3: Runtime ──────────────────────────────────────────────────────────
-FROM eclipse-temurin:17-jre-alpine
+FROM eclipse-temurin:25-jre-alpine
 WORKDIR /app
 
 # Install curl for the HEALTHCHECK below (minimal addition to slim image)
