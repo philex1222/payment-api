@@ -20,4 +20,8 @@ public class PaymentSpecification {
     public static Specification<Payment> createdBefore(LocalDateTime to) {
         return (root, query, cb) -> cb.lessThanOrEqualTo(root.get("createdAt"), to);
     }
+
+    public static Specification<Payment> ownedBy(String username) {
+        return (root, query, cb) -> cb.equal(root.get("createdBy"), username);
+    }
 }

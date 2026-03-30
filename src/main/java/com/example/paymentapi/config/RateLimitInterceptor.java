@@ -1,5 +1,7 @@
 package com.example.paymentapi.config;
 
+import com.github.benmanes.caffeine.cache.Caffeine;
+import com.github.benmanes.caffeine.cache.LoadingCache;
 import io.github.resilience4j.ratelimiter.RateLimiter;
 import io.github.resilience4j.ratelimiter.RateLimiterConfig;
 import io.github.resilience4j.ratelimiter.RateLimiterRegistry;
@@ -12,7 +14,7 @@ import org.springframework.web.servlet.HandlerInterceptor;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.time.Duration;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Rate-limiting interceptor backed by Resilience4j per-client RateLimiters.
@@ -28,25 +30,35 @@ import java.util.concurrent.ConcurrentHashMap;
  * and injects X-Forwarded-For, configure the proxy to sanitise that header
  * rather than reading it here, to prevent clients from spoofing their IP.
  *
+ * <p>Rate-limiter buckets are stored in a bounded Caffeine cache (max 10 000
+ * entries, expire-after-access = 5 minutes) to prevent unbounded memory growth
+ * in long-running instances with many distinct client identities.
+ *
  * Constructor injection is used — never @Autowired field injection.
  */
 @Component
 public class RateLimitInterceptor implements HandlerInterceptor {
 
     private static final Logger logger = LoggerFactory.getLogger(RateLimitInterceptor.class);
+    private static final int MAX_CLIENTS = 10_000;
+    private static final long EXPIRE_AFTER_ACCESS_MINUTES = 5;
 
-    private final ConcurrentHashMap<String, RateLimiter> rateLimiters = new ConcurrentHashMap<>();
+    private final LoadingCache<String, RateLimiter> rateLimiters;
     private final RateLimitProperties rateLimitProperties;
 
     public RateLimitInterceptor(RateLimitProperties rateLimitProperties) {
         this.rateLimitProperties = rateLimitProperties;
+        this.rateLimiters = Caffeine.newBuilder()
+                .maximumSize(MAX_CLIENTS)
+                .expireAfterAccess(EXPIRE_AFTER_ACCESS_MINUTES, TimeUnit.MINUTES)
+                .build(this::createRateLimiter);
     }
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler)
             throws Exception {
         String clientId = getClientIdentifier(request);
-        RateLimiter rateLimiter = rateLimiters.computeIfAbsent(clientId, this::createRateLimiter);
+        RateLimiter rateLimiter = rateLimiters.get(clientId);
         boolean allowRequest = rateLimiter.acquirePermission();
 
         response.addHeader("X-RateLimit-Limit", String.valueOf(rateLimitProperties.getLimit()));
@@ -104,6 +116,6 @@ public class RateLimitInterceptor implements HandlerInterceptor {
 
     /** Clears all per-client rate limiters — intended for test teardown only. */
     public void clearRateLimiters() {
-        rateLimiters.clear();
+        rateLimiters.invalidateAll();
     }
 }

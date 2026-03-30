@@ -2,6 +2,7 @@ package com.example.paymentapi.config;
 
 import com.example.paymentapi.security.JwtTokenFilter;
 import com.example.paymentapi.security.JwtTokenProvider;
+import com.example.paymentapi.service.TokenBlacklistService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -34,6 +35,7 @@ public class SecurityConfig {
 
     private final UserDetailsService userDetailsService;
     private final JwtTokenProvider jwtTokenProvider;
+    private final TokenBlacklistService tokenBlacklistService;
 
     /**
      * Comma-separated allowed origins. Override via CORS_ALLOWED_ORIGINS env var in production.
@@ -43,9 +45,12 @@ public class SecurityConfig {
     @Value("${cors.allowed-origins:http://localhost:3000,http://localhost:8080}")
     private String allowedOrigins;
 
-    public SecurityConfig(UserDetailsService userDetailsService, JwtTokenProvider jwtTokenProvider) {
+    public SecurityConfig(UserDetailsService userDetailsService,
+                          JwtTokenProvider jwtTokenProvider,
+                          TokenBlacklistService tokenBlacklistService) {
         this.userDetailsService = userDetailsService;
         this.jwtTokenProvider = jwtTokenProvider;
+        this.tokenBlacklistService = tokenBlacklistService;
     }
 
     @Bean
@@ -105,7 +110,7 @@ public class SecurityConfig {
                 session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 
             .addFilterBefore(
-                new JwtTokenFilter(jwtTokenProvider),
+                new JwtTokenFilter(jwtTokenProvider, tokenBlacklistService),
                 UsernamePasswordAuthenticationFilter.class);
 
         return http.build();

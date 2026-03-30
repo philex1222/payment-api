@@ -1,5 +1,6 @@
 package com.example.paymentapi.security;
 
+import com.example.paymentapi.service.TokenBlacklistService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.security.core.Authentication;
@@ -16,7 +17,10 @@ import java.io.IOException;
  * Servlet filter that extracts and validates the JWT Bearer token from
  * every inbound request and populates the SecurityContext.
  *
- * If token validation succeeds but the subsequent {@code getAuthentication()}
+ * <p>A token is accepted only when it passes structural validation AND is not
+ * present in the token blacklist (i.e., the user has not logged out).
+ *
+ * <p>If token validation succeeds but the subsequent {@code getAuthentication()}
  * call fails (e.g. the user was deleted since the token was issued), the
  * exception is caught and logged — the request proceeds with no security
  * context so that downstream authorization checks will reject it with 403.
@@ -26,9 +30,11 @@ public class JwtTokenFilter extends OncePerRequestFilter {
     private static final Logger logger = LoggerFactory.getLogger(JwtTokenFilter.class);
 
     private final JwtTokenProvider jwtTokenProvider;
+    private final TokenBlacklistService tokenBlacklistService;
 
-    public JwtTokenFilter(JwtTokenProvider jwtTokenProvider) {
+    public JwtTokenFilter(JwtTokenProvider jwtTokenProvider, TokenBlacklistService tokenBlacklistService) {
         this.jwtTokenProvider = jwtTokenProvider;
+        this.tokenBlacklistService = tokenBlacklistService;
     }
 
     @Override
@@ -37,7 +43,9 @@ public class JwtTokenFilter extends OncePerRequestFilter {
                                     FilterChain filterChain)
             throws ServletException, IOException {
         String token = extractToken(request);
-        if (token != null && jwtTokenProvider.validateToken(token)) {
+        if (token != null
+                && jwtTokenProvider.validateToken(token)
+                && !tokenBlacklistService.isBlacklisted(token)) {
             try {
                 Authentication authentication = jwtTokenProvider.getAuthentication(token);
                 SecurityContextHolder.getContext().setAuthentication(authentication);

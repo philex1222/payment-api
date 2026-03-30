@@ -4,6 +4,7 @@ import com.example.paymentapi.config.RateLimitInterceptor;
 import com.example.paymentapi.config.SecurityConfig;
 import com.example.paymentapi.dto.LoginRequest;
 import com.example.paymentapi.security.JwtTokenProvider;
+import com.example.paymentapi.service.TokenBlacklistService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -21,6 +22,9 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -45,6 +49,9 @@ class AuthControllerTest {
 
     @MockBean
     private UserDetailsService userDetailsService;
+
+    @MockBean
+    private TokenBlacklistService tokenBlacklistService;
 
     // Mock out the interceptor so @WebMvcTest does not need RateLimitProperties on classpath
     @MockBean
@@ -112,6 +119,31 @@ class AuthControllerTest {
         mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("Logout with valid Bearer token returns 200 and blacklists the token")
+    void logout_validToken_returns200AndBlacklists() throws Exception {
+        when(rateLimitInterceptor.preHandle(any(), any(), any())).thenReturn(true);
+        when(jwtTokenProvider.validateToken("my-jwt")).thenReturn(true);
+        when(jwtTokenProvider.getRemainingValidity("my-jwt")).thenReturn(60_000L);
+        // Token is not blacklisted (filter passes through)
+        when(tokenBlacklistService.isBlacklisted(anyString())).thenReturn(false);
+
+        mockMvc.perform(post("/api/v1/auth/logout")
+                        .header("Authorization", "Bearer my-jwt"))
+                .andExpect(status().isOk());
+
+        verify(tokenBlacklistService).blacklist("my-jwt", 60_000L);
+    }
+
+    @Test
+    @DisplayName("Logout without Authorization header returns 400")
+    void logout_noAuthHeader_returns400() throws Exception {
+        when(rateLimitInterceptor.preHandle(any(), any(), any())).thenReturn(true);
+
+        mockMvc.perform(post("/api/v1/auth/logout"))
                 .andExpect(status().isBadRequest());
     }
 }

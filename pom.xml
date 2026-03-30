@@ -124,6 +124,12 @@
             <artifactId>resilience4j-retry</artifactId>
         </dependency>
 
+        <!-- Caffeine cache — bounded in-memory cache for rate-limiter buckets -->
+        <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
+        </dependency>
+
         <!-- Structured JSON logging (Logstash-compatible encoder for ELK / Grafana Loki) -->
         <dependency>
             <groupId>net.logstash.logback</groupId>

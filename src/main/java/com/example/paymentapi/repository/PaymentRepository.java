@@ -15,7 +15,9 @@ import java.util.List;
 @Repository
 public interface PaymentRepository extends JpaRepository<Payment, String>, JpaSpecificationExecutor<Payment> {
     List<Payment> findBySourceAccount(String sourceAccount);
+    List<Payment> findBySourceAccountAndCreatedBy(String sourceAccount, String createdBy);
     List<Payment> findByDestinationAccount(String destinationAccount);
+    List<Payment> findByDestinationAccountAndCreatedBy(String destinationAccount, String createdBy);
     List<Payment> findByStatusAndRetryCountLessThan(String status, int maxRetryCount);
 
     /** Returns [status, count] pairs for all known statuses — used by admin stats. */

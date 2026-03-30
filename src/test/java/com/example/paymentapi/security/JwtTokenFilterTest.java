@@ -1,5 +1,6 @@
 package com.example.paymentapi.security;
 
+import com.example.paymentapi.service.TokenBlacklistService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import org.junit.jupiter.api.BeforeEach;
@@ -23,6 +24,7 @@ import static org.mockito.Mockito.*;
  * Verifies that:
  * - a valid token populates the SecurityContext
  * - an invalid/expired token is ignored (SecurityContext stays empty)
+ * - a blacklisted (logged-out) token is rejected even if structurally valid
  * - an exception during getAuthentication() is swallowed and the context
  *   is cleared (rather than propagating up to the filter chain)
  */
@@ -34,13 +36,16 @@ class JwtTokenFilterTest {
     private JwtTokenProvider jwtTokenProvider;
 
     @Mock
+    private TokenBlacklistService tokenBlacklistService;
+
+    @Mock
     private FilterChain filterChain;
 
     private JwtTokenFilter filter;
 
     @BeforeEach
     void setUp() {
-        filter = new JwtTokenFilter(jwtTokenProvider);
+        filter = new JwtTokenFilter(jwtTokenProvider, tokenBlacklistService);
         SecurityContextHolder.clearContext();
     }
 
@@ -56,6 +61,7 @@ class JwtTokenFilterTest {
         var auth = new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
                 "user", null, java.util.List.of());
         when(jwtTokenProvider.validateToken("valid-token")).thenReturn(true);
+        when(tokenBlacklistService.isBlacklisted("valid-token")).thenReturn(false);
         when(jwtTokenProvider.getAuthentication("valid-token")).thenReturn(auth);
 
         filter.doFilterInternal(
@@ -65,6 +71,22 @@ class JwtTokenFilterTest {
 
         assertThat(SecurityContextHolder.getContext().getAuthentication()).isNotNull();
         verify(filterChain).doFilter(any(), any());
+    }
+
+    @Test
+    @DisplayName("Blacklisted token leaves SecurityContext empty even if structurally valid")
+    void blacklistedToken_leavesContextEmpty() throws ServletException, IOException {
+        when(jwtTokenProvider.validateToken("valid-but-logged-out")).thenReturn(true);
+        when(tokenBlacklistService.isBlacklisted("valid-but-logged-out")).thenReturn(true);
+
+        filter.doFilterInternal(
+                requestWithBearer("valid-but-logged-out"),
+                new MockHttpServletResponse(),
+                filterChain);
+
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+        verify(filterChain).doFilter(any(), any());
+        verify(jwtTokenProvider, never()).getAuthentication(any());
     }
 
     @Test
@@ -98,6 +120,7 @@ class JwtTokenFilterTest {
     @DisplayName("Exception during getAuthentication is swallowed, context cleared, chain continues")
     void getAuthentication_throws_swallowedAndContextCleared() throws ServletException, IOException {
         when(jwtTokenProvider.validateToken("valid-token")).thenReturn(true);
+        when(tokenBlacklistService.isBlacklisted("valid-token")).thenReturn(false);
         when(jwtTokenProvider.getAuthentication("valid-token"))
                 .thenThrow(new RuntimeException("User not found"));
 

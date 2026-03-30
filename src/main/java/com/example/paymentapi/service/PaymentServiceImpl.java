@@ -203,6 +203,10 @@ public class PaymentServiceImpl implements PaymentService {
         if (dateTo != null) {
             spec = spec.and(PaymentSpecification.createdBefore(dateTo));
         }
+        // Non-admin users see only their own payments
+        if (!isCurrentUserAdmin()) {
+            spec = spec.and(PaymentSpecification.ownedBy(currentUsername()));
+        }
         return paymentRepository.findAll(spec, pageable).map(this::mapToResponse);
     }
 
@@ -210,16 +214,20 @@ public class PaymentServiceImpl implements PaymentService {
     @Transactional(readOnly = true)
     public List<PaymentResponse> getPaymentsBySourceAccount(String sourceAccount) {
         logger.debug("Retrieving payments by source account: {}", maskAccount(sourceAccount));
-        return paymentRepository.findBySourceAccount(sourceAccount)
-                .stream().map(this::mapToResponse).collect(Collectors.toList());
+        List<Payment> payments = isCurrentUserAdmin()
+                ? paymentRepository.findBySourceAccount(sourceAccount)
+                : paymentRepository.findBySourceAccountAndCreatedBy(sourceAccount, currentUsername());
+        return payments.stream().map(this::mapToResponse).collect(Collectors.toList());
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<PaymentResponse> getPaymentsByDestinationAccount(String destinationAccount) {
         logger.debug("Retrieving payments by destination account: {}", maskAccount(destinationAccount));
-        return paymentRepository.findByDestinationAccount(destinationAccount)
-                .stream().map(this::mapToResponse).collect(Collectors.toList());
+        List<Payment> payments = isCurrentUserAdmin()
+                ? paymentRepository.findByDestinationAccount(destinationAccount)
+                : paymentRepository.findByDestinationAccountAndCreatedBy(destinationAccount, currentUsername());
+        return payments.stream().map(this::mapToResponse).collect(Collectors.toList());
     }
 
     @Override
@@ -407,6 +415,8 @@ public class PaymentServiceImpl implements PaymentService {
         Payment payment = paymentRepository.findById(id)
                 .orElseThrow(() -> new PaymentNotFoundException("Payment not found with ID: " + id));
 
+        checkOwnership(payment);
+
         PaymentStatus currentStatus = PaymentStatus.fromString(payment.getStatus());
         if (currentStatus != PaymentStatus.FAILED) {
             throw new InvalidStatusTransitionException(id, currentStatus, PaymentStatus.PENDING);
@@ -505,6 +515,20 @@ public class PaymentServiceImpl implements PaymentService {
     private String currentUsername() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         return (auth != null && auth.isAuthenticated()) ? auth.getName() : "anonymous";
+    }
+
+    /**
+     * Returns true if the current principal holds ROLE_ADMIN.
+     * Scheduled jobs (no security context) are treated as non-admin.
+     */
+    private boolean isCurrentUserAdmin() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated()) {
+            return false;
+        }
+        return auth.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .anyMatch(a -> a.equals("ROLE_ADMIN"));
     }
 
     /**
