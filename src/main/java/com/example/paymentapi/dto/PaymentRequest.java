@@ -5,6 +5,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotBlank;
@@ -31,8 +32,9 @@ public class PaymentRequest {
 
     @NotNull(message = "Amount is required")
     @DecimalMin(value = "0.01", message = "Amount must be greater than zero")
+    @DecimalMax(value = "1000000.00", message = "Amount cannot exceed 1,000,000")
     @Digits(integer = 15, fraction = 4, message = "Amount must have at most 15 integer digits and 4 decimal places")
-    @Schema(description = "Payment amount (positive, up to 4 decimal places)", example = "100.00")
+    @Schema(description = "Payment amount (positive, up to 4 decimal places, max 1,000,000)", example = "100.00")
     private BigDecimal amount;
 
     @NotBlank(message = "Currency is required")

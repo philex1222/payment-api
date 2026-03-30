@@ -22,9 +22,12 @@ public class WebMvcConfig implements WebMvcConfigurer {
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(rateLimitInterceptor)
-                .addPathPatterns("/api/v1/payments/**")
-                .excludePathPatterns(
+                .addPathPatterns(
+                        "/api/v1/payments/**",
                         "/api/v1/auth/**",
+                        "/api/v1/admin/**"
+                )
+                .excludePathPatterns(
                         "/actuator/**",
                         "/swagger-ui/**",
                         "/swagger-resources/**",

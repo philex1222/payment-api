@@ -150,6 +150,25 @@ class PaymentRequestValidationTest {
                     .extracting(cv -> cv.getPropertyPath().toString())
                     .contains("amount");
         }
+
+        @Test
+        @DisplayName("Amount exceeding 1,000,000 is rejected")
+        void amount_exceeding_max_isRejected() {
+            PaymentRequest r = validRequest();
+            r.setAmount(new BigDecimal("1000000.01"));
+            Set<ConstraintViolation<PaymentRequest>> violations = validator.validate(r);
+            assertThat(violations)
+                    .extracting(cv -> cv.getPropertyPath().toString())
+                    .contains("amount");
+        }
+
+        @Test
+        @DisplayName("Amount of exactly 1,000,000 passes")
+        void amount_at_max_passes() {
+            PaymentRequest r = validRequest();
+            r.setAmount(new BigDecimal("1000000.00"));
+            assertThat(validator.validate(r)).isEmpty();
+        }
     }
 
     @Nested

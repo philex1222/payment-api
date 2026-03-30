@@ -59,6 +59,7 @@ public class JwtTokenProvider {
 
         String token = Jwts.builder()
                 .subject(userDetails.getUsername())
+                .issuer("payment-api")
                 .issuedAt(now)
                 .expiration(expiryDate)
                 .claim("roles", userDetails.getAuthorities())
@@ -99,7 +100,7 @@ public class JwtTokenProvider {
      */
     public boolean validateToken(String token) {
         try {
-            Jwts.parser().verifyWith(secretKey).build().parseSignedClaims(token);
+            Jwts.parser().verifyWith(secretKey).requireIssuer("payment-api").build().parseSignedClaims(token);
             return true;
         } catch (SignatureException ex) {
             logger.warn("Invalid JWT signature: {}", ex.getMessage());

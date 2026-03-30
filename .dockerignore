@@ -1,0 +1,25 @@
+# Build output
+target/
+
+# Git history
+.git/
+.gitignore
+
+# Secrets — never bake these into the image
+.env
+
+# Documentation
+*.md
+docs/
+
+# Logs
+logs/
+
+# IDE files
+.idea/
+*.iml
+.vscode/
+.DS_Store
+
+# Docker files themselves (not needed in build context)
+.dockerignore

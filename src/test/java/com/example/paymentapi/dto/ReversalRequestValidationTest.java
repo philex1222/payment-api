@@ -124,4 +124,30 @@ class ReversalRequestValidationTest {
                     .contains("reversalAmount");
         }
     }
+
+    @Nested
+    @DisplayName("Cross-Field Validation (partialReversal requires reversalAmount)")
+    class CrossFieldValidation {
+
+        @Test
+        @DisplayName("partialReversal=true with null reversalAmount is rejected")
+        void partial_reversal_nullAmount_isRejected() {
+            ReversalRequest r = validFullReversal();
+            r.setPartialReversal(true);
+            r.setReversalAmount(null);
+            Set<ConstraintViolation<ReversalRequest>> violations = validator.validate(r);
+            assertThat(violations)
+                    .extracting(cv -> cv.getPropertyPath().toString())
+                    .contains("reversalAmountProvidedForPartialReversal");
+        }
+
+        @Test
+        @DisplayName("partialReversal=false with null reversalAmount passes")
+        void full_reversal_nullAmount_passes() {
+            ReversalRequest r = validFullReversal();
+            r.setPartialReversal(false);
+            r.setReversalAmount(null);
+            assertThat(validator.validate(r)).isEmpty();
+        }
+    }
 }

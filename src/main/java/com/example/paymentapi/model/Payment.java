@@ -59,6 +59,14 @@ public class Payment {
     @Column(name = "retry_count", nullable = false)
     private int retryCount = 0;
 
+    /**
+     * Username of the authenticated user who created this payment.
+     * Used for ownership checks (BOLA prevention).
+     * Nullable for backwards compatibility with rows created before this column was added.
+     */
+    @Column(name = "created_by", length = 50)
+    private String createdBy;
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;

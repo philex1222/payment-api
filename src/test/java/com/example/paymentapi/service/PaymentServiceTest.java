@@ -14,6 +14,7 @@ import com.example.paymentapi.model.Payment;
 import com.example.paymentapi.model.PaymentStatus;
 import com.example.paymentapi.model.Transaction;
 import com.example.paymentapi.repository.PaymentRepository;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -25,6 +26,9 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -65,6 +69,12 @@ public class PaymentServiceTest {
 
     @BeforeEach
     void setUp() {
+        // Populate the security context so ownership checks pass (admin bypasses all checks)
+        var adminAuth = new UsernamePasswordAuthenticationToken(
+                "testuser", null,
+                List.of(new SimpleGrantedAuthority("ROLE_ADMIN")));
+        SecurityContextHolder.getContext().setAuthentication(adminAuth);
+
         // lenient: startTimer() is only exercised by createPayment tests, not all test cases
         lenient().when(paymentMetrics.startTimer()).thenReturn(Timer.start());
         paymentService = new PaymentServiceImpl(
@@ -76,6 +86,11 @@ public class PaymentServiceTest {
                 notificationService,
                 paymentMetrics
         );
+    }
+
+    @AfterEach
+    void tearDown() {
+        SecurityContextHolder.clearContext();
     }
 
     private PaymentRequest createValidPaymentRequest() {

@@ -5,6 +5,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotBlank;
@@ -40,4 +41,13 @@ public class ReversalRequest {
     @Size(max = 1000, message = "Notes must not exceed 1000 characters")
     @Schema(description = "Optional additional notes about the reversal")
     private String notes;
+
+    /**
+     * Cross-field validation: when partialReversal=true, reversalAmount must be provided.
+     * Bean Validation picks up @AssertTrue on any boolean getter.
+     */
+    @AssertTrue(message = "Reversal amount is required when partialReversal is true")
+    private boolean isReversalAmountProvidedForPartialReversal() {
+        return !partialReversal || reversalAmount != null;
+    }
 }

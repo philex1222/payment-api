@@ -22,6 +22,10 @@ import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -107,6 +111,7 @@ public class PaymentServiceImpl implements PaymentService {
         payment.setAmount(paymentRequest.getAmount());
         payment.setCurrency(paymentRequest.getCurrency());
         payment.setStatus(PaymentStatus.PENDING.getCode());
+        payment.setCreatedBy(currentUsername());
         Payment createdPayment = paymentRepository.save(payment);
         logger.info("Payment created with ID: {}", createdPayment.getId());
 
@@ -179,6 +184,7 @@ public class PaymentServiceImpl implements PaymentService {
                     return new PaymentNotFoundException("Payment not found with ID: " + id);
                 });
 
+        checkOwnership(payment);
         return mapToResponse(payment);
     }
 
@@ -227,6 +233,8 @@ public class PaymentServiceImpl implements PaymentService {
                     return new PaymentNotFoundException("Payment not found with ID: " + id);
                 });
 
+        checkOwnership(payment);
+
         // Validate the new status
         PaymentStatus newStatus = PaymentStatus.fromString(status);
         PaymentStatus currentStatus = PaymentStatus.fromString(payment.getStatus());
@@ -262,6 +270,8 @@ public class PaymentServiceImpl implements PaymentService {
                     return new PaymentNotFoundException("Payment not found with ID: " + id);
                 });
 
+        checkOwnership(payment);
+
         // Only allow deletion of non-completed payments
         PaymentStatus currentStatus = PaymentStatus.fromString(payment.getStatus());
         if (currentStatus == PaymentStatus.COMPLETED) {
@@ -286,6 +296,8 @@ public class PaymentServiceImpl implements PaymentService {
                     logger.warn("Payment not found for reversal: {}", id);
                     return new PaymentNotFoundException("Payment not found with ID: " + id);
                 });
+
+        checkOwnership(payment);
 
         // Validate current status allows reversal
         PaymentStatus currentStatus = PaymentStatus.fromString(payment.getStatus());
@@ -372,6 +384,8 @@ public class PaymentServiceImpl implements PaymentService {
         logger.info("Cancelling payment: {}", id);
         Payment payment = paymentRepository.findById(id)
                 .orElseThrow(() -> new PaymentNotFoundException("Payment not found with ID: " + id));
+
+        checkOwnership(payment);
 
         PaymentStatus currentStatus = PaymentStatus.fromString(payment.getStatus());
         if (currentStatus != PaymentStatus.PENDING) {
@@ -482,5 +496,38 @@ public class PaymentServiceImpl implements PaymentService {
         // In a real implementation, this would look up the account holder's email
         // For now, return a placeholder
         return "user@example.com";
+    }
+
+    /**
+     * Returns the username of the currently authenticated principal, or "anonymous"
+     * if no security context is available (e.g., during scheduled jobs).
+     */
+    private String currentUsername() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        return (auth != null && auth.isAuthenticated()) ? auth.getName() : "anonymous";
+    }
+
+    /**
+     * Enforces ownership: throws AccessDeniedException if the requesting user is not
+     * an ADMIN and did not create the payment.
+     * Payments with a null createdBy (pre-migration rows) are accessible to ADMIN only.
+     */
+    private void checkOwnership(Payment payment) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated()) {
+            return; // unauthenticated calls are blocked at the security filter layer
+        }
+        boolean isAdmin = auth.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .anyMatch(a -> a.equals("ROLE_ADMIN"));
+        if (isAdmin) {
+            return;
+        }
+        String username = auth.getName();
+        if (payment.getCreatedBy() == null || !payment.getCreatedBy().equals(username)) {
+            logger.warn("Access denied: user '{}' attempted to access payment '{}' owned by '{}'",
+                    username, payment.getId(), payment.getCreatedBy());
+            throw new AccessDeniedException("Access denied: you do not own this payment");
+        }
     }
 }
