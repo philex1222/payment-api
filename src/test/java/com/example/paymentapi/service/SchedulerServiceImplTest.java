@@ -2,6 +2,7 @@ package com.example.paymentapi.service;
 
 import com.example.paymentapi.model.Payment;
 import com.example.paymentapi.model.PaymentStatus;
+import com.example.paymentapi.repository.AuditLogRepository;
 import com.example.paymentapi.repository.PaymentRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
@@ -16,9 +17,7 @@ import java.math.BigDecimal;
 import java.util.Collections;
 import java.util.List;
 
-import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -26,6 +25,9 @@ class SchedulerServiceImplTest {
 
     @Mock
     private PaymentRepository paymentRepository;
+
+    @Mock
+    private AuditLogRepository auditLogRepository;
 
     @Mock
     private PaymentService paymentService;
@@ -36,6 +38,8 @@ class SchedulerServiceImplTest {
     @BeforeEach
     void setUp() {
         ReflectionTestUtils.setField(schedulerService, "maxRetryAttempts", 3);
+        ReflectionTestUtils.setField(schedulerService, "auditLogRetentionDays", 90);
+        ReflectionTestUtils.setField(schedulerService, "paymentRetentionDays", 30);
     }
 
     @Nested
@@ -88,9 +92,24 @@ class SchedulerServiceImplTest {
     class CleanupOldRecordsTests {
 
         @Test
-        void cleanupCompletes_withoutError() {
-            // Verifies the method runs without exception (logic is a placeholder)
+        void cleanupDeletesOldAuditLogsAndCancelledPayments() {
+            when(auditLogRepository.deleteAuditLogsOlderThan(any())).thenReturn(5);
+            when(paymentRepository.deleteTerminalPaymentsOlderThan(any(), any())).thenReturn(3);
+
             schedulerService.cleanupOldRecords();
+
+            verify(auditLogRepository).deleteAuditLogsOlderThan(any());
+            verify(paymentRepository).deleteTerminalPaymentsOlderThan(any(), any());
+        }
+
+        @Test
+        void cleanupWithNoRecordsToDelete_completesWithoutError() {
+            when(auditLogRepository.deleteAuditLogsOlderThan(any())).thenReturn(0);
+            when(paymentRepository.deleteTerminalPaymentsOlderThan(any(), any())).thenReturn(0);
+
+            schedulerService.cleanupOldRecords();
+
+            verify(auditLogRepository).deleteAuditLogsOlderThan(any());
         }
     }
 

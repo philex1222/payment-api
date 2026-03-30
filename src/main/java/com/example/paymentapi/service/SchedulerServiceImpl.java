@@ -2,13 +2,16 @@ package com.example.paymentapi.service;
 
 import com.example.paymentapi.model.Payment;
 import com.example.paymentapi.model.PaymentStatus;
+import com.example.paymentapi.repository.AuditLogRepository;
 import com.example.paymentapi.repository.PaymentRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
@@ -17,13 +20,23 @@ public class SchedulerServiceImpl implements SchedulerService {
     private static final Logger logger = LoggerFactory.getLogger(SchedulerServiceImpl.class);
 
     private final PaymentRepository paymentRepository;
+    private final AuditLogRepository auditLogRepository;
     private final PaymentService paymentService;
 
     @Value("${scheduler.retry.max-attempts:3}")
     private int maxRetryAttempts;
 
-    public SchedulerServiceImpl(PaymentRepository paymentRepository, PaymentService paymentService) {
+    @Value("${scheduler.cleanup.audit-log-retention-days:90}")
+    private int auditLogRetentionDays;
+
+    @Value("${scheduler.cleanup.payment-retention-days:30}")
+    private int paymentRetentionDays;
+
+    public SchedulerServiceImpl(PaymentRepository paymentRepository,
+                                AuditLogRepository auditLogRepository,
+                                PaymentService paymentService) {
         this.paymentRepository = paymentRepository;
+        this.auditLogRepository = auditLogRepository;
         this.paymentService = paymentService;
     }
 
@@ -50,8 +63,22 @@ public class SchedulerServiceImpl implements SchedulerService {
 
     @Override
     @Scheduled(cron = "${scheduler.cleanup.cron:0 0 2 * * ?}")
+    @Transactional
     public void cleanupOldRecords() {
         logger.info("Cleanup job: running nightly maintenance");
-        // Placeholder for future tasks: archive old audit logs, purge cancelled records, etc.
+
+        // 1. Purge old audit logs — they grow unbounded without this
+        LocalDateTime auditCutoff = LocalDateTime.now().minusDays(auditLogRetentionDays);
+        int auditDeleted = auditLogRepository.deleteAuditLogsOlderThan(auditCutoff);
+        logger.info("Cleanup job: deleted {} audit log entries older than {} days",
+                auditDeleted, auditLogRetentionDays);
+
+        // 2. Purge CANCELLED payments that are old enough to be archived.
+        //    FAILED payments are intentionally kept longer (useful for debugging retries).
+        LocalDateTime paymentCutoff = LocalDateTime.now().minusDays(paymentRetentionDays);
+        List<String> purgeStatuses = List.of(PaymentStatus.CANCELLED.getCode());
+        int paymentsDeleted = paymentRepository.deleteTerminalPaymentsOlderThan(purgeStatuses, paymentCutoff);
+        logger.info("Cleanup job: deleted {} CANCELLED payments older than {} days",
+                paymentsDeleted, paymentRetentionDays);
     }
 }

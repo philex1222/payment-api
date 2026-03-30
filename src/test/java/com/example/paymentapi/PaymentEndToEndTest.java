@@ -248,7 +248,7 @@ public class PaymentEndToEndTest {
                     String.class
             );
 
-            assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
+            assertEquals(HttpStatus.UNAUTHORIZED, response.getStatusCode());
         }
 
         @Test
