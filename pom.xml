@@ -70,7 +70,7 @@
         <dependency>
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
-            <scope>test</scope>
+            <scope>runtime</scope>
         </dependency>
 
         <!-- JWT (split JARs — api at compile, impl+jackson at runtime) -->
@@ -188,6 +188,11 @@
                             <artifactId>lombok</artifactId>
                         </exclude>
                     </excludes>
+                    <!-- Activate 'local' profile by default for mvn spring-boot:run.
+                         Override with: mvn spring-boot:run -Dspring-boot.run.profiles=docker -->
+                    <profiles>
+                        <profile>local</profile>
+                    </profiles>
                 </configuration>
             </plugin>
 
