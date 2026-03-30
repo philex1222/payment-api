@@ -46,6 +46,10 @@ public class JwtTokenProvider {
         // Keys.hmacShaKeyFor requires at least 512 bits (64 bytes) for HS512.
         byte[] keyBytes = jwtSecretString.getBytes(StandardCharsets.UTF_8);
         this.secretKey = Keys.hmacShaKeyFor(keyBytes);
+        if (jwtSecretString.startsWith("change-me")) {
+            logger.warn("SECURITY: JWT secret is using the insecure development default. "
+                    + "Set the JWT_SECRET environment variable before deploying to production.");
+        }
         logger.info("JWT Token Provider initialised with expiration: {} ms", jwtExpiration);
     }
 
