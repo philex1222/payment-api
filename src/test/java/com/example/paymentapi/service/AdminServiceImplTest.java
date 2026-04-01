@@ -99,6 +99,32 @@ class AdminServiceImplTest {
     }
 
     @Nested
+    @DisplayName("getUserById()")
+    class GetUserByIdTests {
+
+        @Test
+        @DisplayName("Returns user summary for existing ID")
+        void returnsUserSummary() {
+            User u = user(5L, "carol", "ROLE_USER");
+            when(userRepository.findById(5L)).thenReturn(Optional.of(u));
+
+            UserSummaryResponse result = adminService.getUserById(5L);
+
+            assertEquals(5L, result.getId());
+            assertEquals("carol", result.getUsername());
+            assertEquals("ROLE_USER", result.getRole());
+        }
+
+        @Test
+        @DisplayName("Throws UserNotFoundException for unknown ID")
+        void throwsForUnknownUser() {
+            when(userRepository.findById(99L)).thenReturn(Optional.empty());
+
+            assertThrows(UserNotFoundException.class, () -> adminService.getUserById(99L));
+        }
+    }
+
+    @Nested
     @DisplayName("updateUserRole()")
     class UpdateUserRoleTests {
 

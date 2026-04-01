@@ -100,6 +100,38 @@ class AdminControllerTest {
     }
 
     @Nested
+    @DisplayName("GET /api/v1/admin/users/{id}")
+    class GetUserByIdTests {
+
+        @Test
+        @DisplayName("Returns 200 with user for existing ID")
+        void returnsUser() throws Exception {
+            UserSummaryResponse user = new UserSummaryResponse(3L, "carol", "ROLE_USER");
+            when(adminService.getUserById(3L)).thenReturn(user);
+
+            mockMvc.perform(get("/api/v1/admin/users/3")
+                            .header("Authorization", adminToken))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.id").value(3))
+                    .andExpect(jsonPath("$.username").value("carol"))
+                    .andExpect(jsonPath("$.role").value("ROLE_USER"));
+        }
+
+        @Test
+        @DisplayName("Returns 404 when user not found")
+        void returns404ForUnknownUser() throws Exception {
+            when(adminService.getUserById(999L))
+                    .thenThrow(new UserNotFoundException("User not found with id: 999"));
+
+            mockMvc.perform(get("/api/v1/admin/users/999")
+                            .header("Authorization", adminToken))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.status").value(404))
+                    .andExpect(jsonPath("$.error").value("User Not Found"));
+        }
+    }
+
+    @Nested
     @DisplayName("GET /api/v1/admin/users")
     class GetUsersTests {
 

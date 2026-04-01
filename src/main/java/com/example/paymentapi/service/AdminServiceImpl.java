@@ -67,6 +67,13 @@ public class AdminServiceImpl implements AdminService {
     }
 
     @Override
+    public UserSummaryResponse getUserById(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new UserNotFoundException("User not found with id: " + userId));
+        return UserSummaryResponse.from(user);
+    }
+
+    @Override
     @Transactional
     public UserSummaryResponse updateUserRole(Long userId, RoleUpdateRequest request) {
         User user = userRepository.findById(userId)

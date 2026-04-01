@@ -41,6 +41,20 @@ public class AdminController {
         return ResponseEntity.ok(adminService.getStats());
     }
 
+    @GetMapping("/users/{id}")
+    @Operation(summary = "Get a user by ID",
+               description = "Returns a single user record. Passwords are never included in the response.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "User found"),
+        @ApiResponse(responseCode = "403", description = "Requires ROLE_ADMIN"),
+        @ApiResponse(responseCode = "404", description = "User not found")
+    })
+    public ResponseEntity<UserSummaryResponse> getUserById(
+            @Parameter(description = "User ID", required = true)
+            @PathVariable Long id) {
+        return ResponseEntity.ok(adminService.getUserById(id));
+    }
+
     @GetMapping("/users")
     @Operation(summary = "List all users (paginated)",
                description = "Returns all registered users. Passwords are never included in the response.")
