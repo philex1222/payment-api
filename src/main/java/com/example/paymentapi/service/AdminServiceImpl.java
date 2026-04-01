@@ -3,7 +3,7 @@ package com.example.paymentapi.service;
 import com.example.paymentapi.dto.AdminStatsResponse;
 import com.example.paymentapi.dto.RoleUpdateRequest;
 import com.example.paymentapi.dto.UserSummaryResponse;
-import com.example.paymentapi.exception.PaymentNotFoundException;
+import com.example.paymentapi.exception.UserNotFoundException;
 import com.example.paymentapi.model.User;
 import com.example.paymentapi.repository.PaymentRepository;
 import com.example.paymentapi.repository.UserRepository;
@@ -70,7 +70,7 @@ public class AdminServiceImpl implements AdminService {
     @Transactional
     public UserSummaryResponse updateUserRole(Long userId, RoleUpdateRequest request) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new PaymentNotFoundException("User not found with id: " + userId));
+                .orElseThrow(() -> new UserNotFoundException("User not found with id: " + userId));
 
         user.setRole(request.getRole());
         User saved = userRepository.save(user);

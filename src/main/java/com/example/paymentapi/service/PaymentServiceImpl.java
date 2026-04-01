@@ -192,9 +192,10 @@ public class PaymentServiceImpl implements PaymentService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<PaymentResponse> getPayments(String status, LocalDateTime dateFrom, LocalDateTime dateTo, Pageable pageable) {
-        logger.debug("Retrieving payments: status={}, dateFrom={}, dateTo={}, page={}, size={}",
-                status, dateFrom, dateTo, pageable.getPageNumber(), pageable.getPageSize());
+    public Page<PaymentResponse> getPayments(String status, LocalDateTime dateFrom, LocalDateTime dateTo,
+                                             BigDecimal amountFrom, BigDecimal amountTo, Pageable pageable) {
+        logger.debug("Retrieving payments: status={}, dateFrom={}, dateTo={}, amountFrom={}, amountTo={}, page={}, size={}",
+                status, dateFrom, dateTo, amountFrom, amountTo, pageable.getPageNumber(), pageable.getPageSize());
         Specification<Payment> spec = Specification.where(null);
         if (status != null && !status.isBlank()) {
             spec = spec.and(PaymentSpecification.hasStatus(status));
@@ -204,6 +205,12 @@ public class PaymentServiceImpl implements PaymentService {
         }
         if (dateTo != null) {
             spec = spec.and(PaymentSpecification.createdBefore(dateTo));
+        }
+        if (amountFrom != null) {
+            spec = spec.and(PaymentSpecification.amountGreaterThanOrEqual(amountFrom));
+        }
+        if (amountTo != null) {
+            spec = spec.and(PaymentSpecification.amountLessThanOrEqual(amountTo));
         }
         // Non-admin users see only their own payments
         if (!isCurrentUserAdmin()) {

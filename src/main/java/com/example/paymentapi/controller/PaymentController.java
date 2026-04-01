@@ -22,6 +22,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -90,7 +91,7 @@ public class PaymentController {
 
     @GetMapping
     @Operation(summary = "Get payments (paginated + filtered)",
-               description = "All filter params are optional. Combine freely: ?status=FAILED&dateFrom=2026-01-01T00:00:00")
+               description = "All filter params are optional. Combine freely: ?status=FAILED&amountFrom=100&dateFrom=2026-01-01T00:00:00")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Payments retrieved successfully"),
         @ApiResponse(responseCode = "500", description = "Internal server error")
@@ -102,8 +103,12 @@ public class PaymentController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime dateFrom,
             @Parameter(description = "Filter by creation date — to (ISO-8601, e.g. 2026-12-31T23:59:59)")
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime dateTo,
+            @Parameter(description = "Filter by minimum amount (inclusive)")
+            @RequestParam(required = false) BigDecimal amountFrom,
+            @Parameter(description = "Filter by maximum amount (inclusive)")
+            @RequestParam(required = false) BigDecimal amountTo,
             Pageable pageable) {
-        return ResponseEntity.ok(paymentService.getPayments(status, dateFrom, dateTo, pageable));
+        return ResponseEntity.ok(paymentService.getPayments(status, dateFrom, dateTo, amountFrom, amountTo, pageable));
     }
 
     @GetMapping("/source-account")

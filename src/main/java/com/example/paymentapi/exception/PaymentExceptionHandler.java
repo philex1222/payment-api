@@ -41,6 +41,15 @@ public class PaymentExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
     }
 
+    @ExceptionHandler(UserNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleUserNotFoundException(
+            UserNotFoundException ex, WebRequest request) {
+        logger.warn("User not found: {}", ex.getMessage());
+        ErrorResponse error = createErrorResponse(
+                HttpStatus.NOT_FOUND, "User Not Found", ex.getMessage(), request);
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
+    }
+
     @ExceptionHandler(TransactionNotFoundException.class)
     public ResponseEntity<ErrorResponse> handleTransactionNotFoundException(
             TransactionNotFoundException ex, WebRequest request) {

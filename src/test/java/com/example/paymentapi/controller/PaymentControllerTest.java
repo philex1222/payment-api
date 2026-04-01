@@ -213,7 +213,7 @@ public class PaymentControllerTest {
         p.setStatus("COMPLETED");
         p.setCreatedAt(LocalDateTime.now());
 
-        when(paymentService.getPayments(isNull(), isNull(), isNull(), any()))
+        when(paymentService.getPayments(isNull(), isNull(), isNull(), isNull(), isNull(), any()))
                 .thenReturn(new PageImpl<>(List.of(p), PageRequest.of(0, 10), 1));
 
         mockMvc.perform(get("/api/v1/payments")
@@ -224,14 +224,14 @@ public class PaymentControllerTest {
 
     @Test
     public void testGetPayments_withStatusFilter_passesFilterToService() throws Exception {
-        when(paymentService.getPayments(eq("FAILED"), isNull(), isNull(), any()))
+        when(paymentService.getPayments(eq("FAILED"), isNull(), isNull(), isNull(), isNull(), any()))
                 .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 10), 0));
 
         mockMvc.perform(get("/api/v1/payments?status=FAILED")
                         .header("Authorization", token))
                 .andExpect(status().isOk());
 
-        verify(paymentService).getPayments(eq("FAILED"), isNull(), isNull(), any());
+        verify(paymentService).getPayments(eq("FAILED"), isNull(), isNull(), isNull(), isNull(), any());
     }
 
     @Test

@@ -3,6 +3,7 @@ package com.example.paymentapi.repository;
 import com.example.paymentapi.model.Payment;
 import org.springframework.data.jpa.domain.Specification;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 public class PaymentSpecification {
@@ -23,5 +24,13 @@ public class PaymentSpecification {
 
     public static Specification<Payment> ownedBy(String username) {
         return (root, query, cb) -> cb.equal(root.get("createdBy"), username);
+    }
+
+    public static Specification<Payment> amountGreaterThanOrEqual(BigDecimal min) {
+        return (root, query, cb) -> cb.greaterThanOrEqualTo(root.get("amount"), min);
+    }
+
+    public static Specification<Payment> amountLessThanOrEqual(BigDecimal max) {
+        return (root, query, cb) -> cb.lessThanOrEqualTo(root.get("amount"), max);
     }
 }

@@ -3,7 +3,7 @@ package com.example.paymentapi.service;
 import com.example.paymentapi.dto.AdminStatsResponse;
 import com.example.paymentapi.dto.RoleUpdateRequest;
 import com.example.paymentapi.dto.UserSummaryResponse;
-import com.example.paymentapi.exception.PaymentNotFoundException;
+import com.example.paymentapi.exception.UserNotFoundException;
 import com.example.paymentapi.model.User;
 import com.example.paymentapi.repository.PaymentRepository;
 import com.example.paymentapi.repository.UserRepository;
@@ -121,7 +121,7 @@ class AdminServiceImplTest {
         void throwsForUnknownUser() {
             when(userRepository.findById(99L)).thenReturn(Optional.empty());
 
-            assertThrows(PaymentNotFoundException.class,
+            assertThrows(UserNotFoundException.class,
                     () -> adminService.updateUserRole(99L, new RoleUpdateRequest("ROLE_ADMIN")));
         }
     }

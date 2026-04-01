@@ -8,13 +8,15 @@ import com.example.paymentapi.exception.InvalidAccountException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
 public interface PaymentService {
     PaymentResponse createPayment(PaymentRequest paymentRequest) throws InsufficientFundsException, InvalidAccountException;
     PaymentResponse getPaymentById(String id);
-    Page<PaymentResponse> getPayments(String status, LocalDateTime dateFrom, LocalDateTime dateTo, Pageable pageable);
+    Page<PaymentResponse> getPayments(String status, LocalDateTime dateFrom, LocalDateTime dateTo,
+                                      BigDecimal amountFrom, BigDecimal amountTo, Pageable pageable);
     List<PaymentResponse> getPaymentsBySourceAccount(String sourceAccount);
     List<PaymentResponse> getPaymentsByDestinationAccount(String destinationAccount);
     PaymentResponse updatePaymentStatus(String id, String status);
