@@ -509,6 +509,94 @@ public class PaymentIntegrationTest {
         }
     }
 
+    @Nested
+    @DisplayName("BOLA (Broken Object Level Authorization) Tests")
+    class BolaTests {
+
+        @Test
+        @DisplayName("USER cannot access a payment created by ADMIN — expects 403")
+        void testBola_userCannotAccessAdminPayment() throws Exception {
+            // Create a payment as ADMIN
+            String paymentId = createPaymentAndGetId();
+
+            // Obtain a token for the regular "user" account
+            LoginRequest userLogin = new LoginRequest();
+            userLogin.setUsername("user");
+            userLogin.setPassword("password");
+            String userJson = mockMvc.perform(post("/api/v1/auth/login")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(userLogin)))
+                    .andExpect(status().isOk())
+                    .andReturn().getResponse().getContentAsString();
+            String userToken = "Bearer " + objectMapper.readValue(userJson, LoginResponse.class).getToken();
+
+            // USER tries to read admin's payment — must be denied
+            mockMvc.perform(get("/api/v1/payments/" + paymentId)
+                            .header("Authorization", userToken))
+                    .andExpect(status().isForbidden());
+        }
+
+        @Test
+        @DisplayName("USER can access their own payment")
+        void testBola_userCanAccessOwnPayment() throws Exception {
+            // Obtain a token for the regular "user" account
+            LoginRequest userLogin = new LoginRequest();
+            userLogin.setUsername("user");
+            userLogin.setPassword("password");
+            String userJson = mockMvc.perform(post("/api/v1/auth/login")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(userLogin)))
+                    .andExpect(status().isOk())
+                    .andReturn().getResponse().getContentAsString();
+            String userToken = "Bearer " + objectMapper.readValue(userJson, LoginResponse.class).getToken();
+
+            // Create a payment as "user"
+            PaymentRequest request = createValidPaymentRequest();
+            String responseJson = mockMvc.perform(post("/api/v1/payments")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .header("Authorization", userToken)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isCreated())
+                    .andReturn().getResponse().getContentAsString();
+            String paymentId = objectMapper.readTree(responseJson).get("id").asText();
+
+            // USER reads their own payment — must succeed
+            mockMvc.perform(get("/api/v1/payments/" + paymentId)
+                            .header("Authorization", userToken))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.id").value(paymentId));
+        }
+
+        @Test
+        @DisplayName("ADMIN can access any payment regardless of creator")
+        void testBola_adminCanAccessAnyPayment() throws Exception {
+            // Create a payment as the regular "user"
+            LoginRequest userLogin = new LoginRequest();
+            userLogin.setUsername("user");
+            userLogin.setPassword("password");
+            String userJson = mockMvc.perform(post("/api/v1/auth/login")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(userLogin)))
+                    .andExpect(status().isOk())
+                    .andReturn().getResponse().getContentAsString();
+            String userToken = "Bearer " + objectMapper.readValue(userJson, LoginResponse.class).getToken();
+
+            String responseJson = mockMvc.perform(post("/api/v1/payments")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .header("Authorization", userToken)
+                            .content(objectMapper.writeValueAsString(createValidPaymentRequest())))
+                    .andExpect(status().isCreated())
+                    .andReturn().getResponse().getContentAsString();
+            String paymentId = objectMapper.readTree(responseJson).get("id").asText();
+
+            // ADMIN reads user's payment — must succeed
+            mockMvc.perform(get("/api/v1/payments/" + paymentId)
+                            .header("Authorization", authToken))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.id").value(paymentId));
+        }
+    }
+
     // Helper methods
 
     private PaymentRequest createValidPaymentRequest() {
