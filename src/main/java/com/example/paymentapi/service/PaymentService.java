@@ -16,7 +16,8 @@ public interface PaymentService {
     PaymentResponse createPayment(PaymentRequest paymentRequest) throws InsufficientFundsException, InvalidAccountException;
     PaymentResponse getPaymentById(String id);
     Page<PaymentResponse> getPayments(String status, LocalDateTime dateFrom, LocalDateTime dateTo,
-                                      BigDecimal amountFrom, BigDecimal amountTo, Pageable pageable);
+                                      BigDecimal amountFrom, BigDecimal amountTo,
+                                      String currency, Pageable pageable);
     List<PaymentResponse> getPaymentsBySourceAccount(String sourceAccount);
     List<PaymentResponse> getPaymentsByDestinationAccount(String destinationAccount);
     PaymentResponse updatePaymentStatus(String id, String status);

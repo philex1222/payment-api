@@ -33,4 +33,8 @@ public class PaymentSpecification {
     public static Specification<Payment> amountLessThanOrEqual(BigDecimal max) {
         return (root, query, cb) -> cb.lessThanOrEqualTo(root.get("amount"), max);
     }
+
+    public static Specification<Payment> hasCurrency(String currency) {
+        return (root, query, cb) -> cb.equal(root.get("currency"), currency.toUpperCase());
+    }
 }

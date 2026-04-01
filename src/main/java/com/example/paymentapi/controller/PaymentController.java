@@ -91,9 +91,10 @@ public class PaymentController {
 
     @GetMapping
     @Operation(summary = "Get payments (paginated + filtered)",
-               description = "All filter params are optional. Combine freely: ?status=FAILED&amountFrom=100&dateFrom=2026-01-01T00:00:00")
+               description = "All filter params are optional. Combine freely: ?status=FAILED&currency=USD&amountFrom=100&amountTo=500")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Payments retrieved successfully"),
+        @ApiResponse(responseCode = "400", description = "Invalid filter parameters"),
         @ApiResponse(responseCode = "500", description = "Internal server error")
     })
     public ResponseEntity<Page<PaymentResponse>> getPayments(
@@ -107,8 +108,13 @@ public class PaymentController {
             @RequestParam(required = false) BigDecimal amountFrom,
             @Parameter(description = "Filter by maximum amount (inclusive)")
             @RequestParam(required = false) BigDecimal amountTo,
+            @Parameter(description = "Filter by ISO 4217 currency code (e.g. USD, EUR, GBP)")
+            @RequestParam(required = false) String currency,
             Pageable pageable) {
-        return ResponseEntity.ok(paymentService.getPayments(status, dateFrom, dateTo, amountFrom, amountTo, pageable));
+        if (amountFrom != null && amountTo != null && amountFrom.compareTo(amountTo) > 0) {
+            throw new IllegalArgumentException("amountFrom cannot be greater than amountTo");
+        }
+        return ResponseEntity.ok(paymentService.getPayments(status, dateFrom, dateTo, amountFrom, amountTo, currency, pageable));
     }
 
     @GetMapping("/source-account")

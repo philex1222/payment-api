@@ -276,7 +276,7 @@ public class PaymentServiceTest {
             when(paymentRepository.findAll(any(org.springframework.data.jpa.domain.Specification.class), eq(pageable)))
                     .thenReturn(page);
 
-            Page<PaymentResponse> result = paymentService.getPayments(null, null, null, null, null, pageable);
+            Page<PaymentResponse> result = paymentService.getPayments(null, null, null, null, null, null, pageable);
 
             assertNotNull(result);
             assertEquals(2, result.getTotalElements());
@@ -291,7 +291,7 @@ public class PaymentServiceTest {
             when(paymentRepository.findAll(any(org.springframework.data.jpa.domain.Specification.class), eq(pageable)))
                     .thenReturn(emptyPage);
 
-            Page<PaymentResponse> result = paymentService.getPayments(null, null, null, null, null, pageable);
+            Page<PaymentResponse> result = paymentService.getPayments(null, null, null, null, null, null, pageable);
 
             assertNotNull(result);
             assertEquals(0, result.getTotalElements());
