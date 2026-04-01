@@ -13,8 +13,11 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -64,6 +67,23 @@ public class AdminController {
     })
     public ResponseEntity<Page<UserSummaryResponse>> getUsers(Pageable pageable) {
         return ResponseEntity.ok(adminService.getUsers(pageable));
+    }
+
+    @DeleteMapping("/users/{id}")
+    @Operation(summary = "Delete a user",
+               description = "Permanently removes the user. Admins cannot delete their own account.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "204", description = "User deleted successfully"),
+        @ApiResponse(responseCode = "403", description = "Requires ROLE_ADMIN"),
+        @ApiResponse(responseCode = "404", description = "User not found"),
+        @ApiResponse(responseCode = "409", description = "Cannot delete own account")
+    })
+    public ResponseEntity<Void> deleteUser(
+            @Parameter(description = "User ID", required = true)
+            @PathVariable Long id,
+            @AuthenticationPrincipal UserDetails principal) {
+        adminService.deleteUser(id, principal.getUsername());
+        return ResponseEntity.noContent().build();
     }
 
     @PatchMapping("/users/{id}/role")

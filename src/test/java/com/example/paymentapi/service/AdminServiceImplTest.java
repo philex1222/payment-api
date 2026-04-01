@@ -125,6 +125,44 @@ class AdminServiceImplTest {
     }
 
     @Nested
+    @DisplayName("deleteUser()")
+    class DeleteUserTests {
+
+        @Test
+        @DisplayName("Deletes user and evicts cache when target != requester")
+        void deletesUser() {
+            User u = user(10L, "dave", "ROLE_USER");
+            when(userRepository.findById(10L)).thenReturn(Optional.of(u));
+
+            adminService.deleteUser(10L, "admin");
+
+            verify(userDetailsService).evictUser("dave");
+            verify(userRepository).delete(u);
+        }
+
+        @Test
+        @DisplayName("Throws IllegalStateException when admin deletes own account")
+        void throwsWhenDeletingSelf() {
+            User u = user(1L, "admin", "ROLE_ADMIN");
+            when(userRepository.findById(1L)).thenReturn(Optional.of(u));
+
+            assertThrows(IllegalStateException.class,
+                    () -> adminService.deleteUser(1L, "admin"));
+
+            verify(userRepository, never()).delete(any());
+        }
+
+        @Test
+        @DisplayName("Throws UserNotFoundException for unknown ID")
+        void throwsForUnknownUser() {
+            when(userRepository.findById(99L)).thenReturn(Optional.empty());
+
+            assertThrows(UserNotFoundException.class,
+                    () -> adminService.deleteUser(99L, "admin"));
+        }
+    }
+
+    @Nested
     @DisplayName("updateUserRole()")
     class UpdateUserRoleTests {
 

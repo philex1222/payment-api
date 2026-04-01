@@ -29,6 +29,10 @@ import com.example.paymentapi.exception.UserNotFoundException;
 import org.springframework.security.test.context.support.WithMockUser;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -197,6 +201,45 @@ class AdminControllerTest {
                     .andExpect(status().isNotFound())
                     .andExpect(jsonPath("$.status").value(404))
                     .andExpect(jsonPath("$.error").value("User Not Found"));
+        }
+    }
+
+    @Nested
+    @DisplayName("DELETE /api/v1/admin/users/{id}")
+    class DeleteUserTests {
+
+        @Test
+        @DisplayName("Returns 204 when user is successfully deleted")
+        void deletesUser() throws Exception {
+            doNothing().when(adminService).deleteUser(anyLong(), anyString());
+
+            mockMvc.perform(delete("/api/v1/admin/users/5")
+                            .header("Authorization", adminToken))
+                    .andExpect(status().isNoContent());
+        }
+
+        @Test
+        @DisplayName("Returns 404 when user not found")
+        void returns404ForUnknownUser() throws Exception {
+            doThrow(new UserNotFoundException("User not found with id: 999"))
+                    .when(adminService).deleteUser(anyLong(), anyString());
+
+            mockMvc.perform(delete("/api/v1/admin/users/999")
+                            .header("Authorization", adminToken))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.status").value(404));
+        }
+
+        @Test
+        @DisplayName("Returns 409 when admin tries to delete own account")
+        void returns409WhenDeletingSelf() throws Exception {
+            doThrow(new IllegalStateException("Admins cannot delete their own account"))
+                    .when(adminService).deleteUser(anyLong(), anyString());
+
+            mockMvc.perform(delete("/api/v1/admin/users/1")
+                            .header("Authorization", adminToken))
+                    .andExpect(status().isConflict())
+                    .andExpect(jsonPath("$.status").value(409));
         }
     }
 

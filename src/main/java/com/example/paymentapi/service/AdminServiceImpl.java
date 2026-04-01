@@ -75,6 +75,18 @@ public class AdminServiceImpl implements AdminService {
 
     @Override
     @Transactional
+    public void deleteUser(Long userId, String requestingUsername) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new UserNotFoundException("User not found with id: " + userId));
+        if (user.getUsername().equals(requestingUsername)) {
+            throw new IllegalStateException("Admins cannot delete their own account");
+        }
+        userDetailsService.evictUser(user.getUsername());
+        userRepository.delete(user);
+    }
+
+    @Override
+    @Transactional
     public UserSummaryResponse updateUserRole(Long userId, RoleUpdateRequest request) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new UserNotFoundException("User not found with id: " + userId));
