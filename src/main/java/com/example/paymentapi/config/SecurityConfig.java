@@ -78,6 +78,9 @@ public class SecurityConfig {
 
             // Authorization rules — ADMIN inherits USER access to payment endpoints
             .authorizeHttpRequests(auth -> auth
+                // change-password requires an authenticated session;
+                // must be declared before the broader /api/v1/auth/** permitAll rule
+                .requestMatchers("/api/v1/auth/change-password").authenticated()
                 .requestMatchers("/api/v1/auth/**").permitAll()
                 .requestMatchers(
                     "/swagger-ui/**",

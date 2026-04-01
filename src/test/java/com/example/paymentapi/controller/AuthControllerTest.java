@@ -2,9 +2,11 @@ package com.example.paymentapi.controller;
 
 import com.example.paymentapi.config.RateLimitInterceptor;
 import com.example.paymentapi.config.SecurityConfig;
+import com.example.paymentapi.dto.ChangePasswordRequest;
 import com.example.paymentapi.dto.LoginRequest;
 import com.example.paymentapi.security.JwtTokenProvider;
 import com.example.paymentapi.service.TokenBlacklistService;
+import com.example.paymentapi.service.UserService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -17,13 +19,20 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.util.List;
+
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -52,6 +61,9 @@ class AuthControllerTest {
 
     @MockBean
     private TokenBlacklistService tokenBlacklistService;
+
+    @MockBean
+    private UserService userService;
 
     // Mock out the interceptor so @WebMvcTest does not need RateLimitProperties on classpath
     @MockBean
@@ -145,5 +157,63 @@ class AuthControllerTest {
 
         mockMvc.perform(post("/api/v1/auth/logout"))
                 .andExpect(status().isBadRequest());
+    }
+
+    // ── change-password ────────────────────────────────────────────────────────
+
+    @Test
+    @WithMockUser(username = "user", roles = "USER")
+    @DisplayName("Change password with correct current password returns 200")
+    void changePassword_correctCurrentPassword_returns200() throws Exception {
+        when(rateLimitInterceptor.preHandle(any(), any(), any())).thenReturn(true);
+        doNothing().when(userService).changePassword("user", "oldPass1", "newPass123");
+
+        mockMvc.perform(post("/api/v1/auth/change-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new ChangePasswordRequest("oldPass1", "newPass123"))))
+                .andExpect(status().isOk());
+
+        verify(userService).changePassword("user", "oldPass1", "newPass123");
+    }
+
+    @Test
+    @WithMockUser(username = "user", roles = "USER")
+    @DisplayName("Change password with wrong current password returns 401")
+    void changePassword_wrongCurrentPassword_returns401() throws Exception {
+        when(rateLimitInterceptor.preHandle(any(), any(), any())).thenReturn(true);
+        doThrow(new BadCredentialsException("bad"))
+                .when(userService).changePassword("user", "wrong", "newPass123");
+
+        mockMvc.perform(post("/api/v1/auth/change-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new ChangePasswordRequest("wrong", "newPass123"))))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @WithMockUser(username = "user", roles = "USER")
+    @DisplayName("Change password with too-short new password returns 400")
+    void changePassword_shortNewPassword_returns400() throws Exception {
+        when(rateLimitInterceptor.preHandle(any(), any(), any())).thenReturn(true);
+
+        mockMvc.perform(post("/api/v1/auth/change-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new ChangePasswordRequest("oldPass1", "short"))))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("Change password without authentication returns 401")
+    void changePassword_unauthenticated_returns401() throws Exception {
+        when(rateLimitInterceptor.preHandle(any(), any(), any())).thenReturn(true);
+
+        mockMvc.perform(post("/api/v1/auth/change-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new ChangePasswordRequest("old", "newPass123"))))
+                .andExpect(status().isUnauthorized());
     }
 }

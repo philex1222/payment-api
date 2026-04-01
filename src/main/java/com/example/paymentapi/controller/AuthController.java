@@ -1,10 +1,12 @@
 package com.example.paymentapi.controller;
 
+import com.example.paymentapi.dto.ChangePasswordRequest;
 import com.example.paymentapi.dto.ErrorResponse;
 import com.example.paymentapi.dto.LoginRequest;
 import com.example.paymentapi.dto.LoginResponse;
 import com.example.paymentapi.security.JwtTokenProvider;
 import com.example.paymentapi.service.TokenBlacklistService;
+import com.example.paymentapi.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -19,6 +21,8 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -35,13 +39,16 @@ public class AuthController {
     private final AuthenticationManager authenticationManager;
     private final JwtTokenProvider jwtTokenProvider;
     private final TokenBlacklistService tokenBlacklistService;
+    private final UserService userService;
 
     public AuthController(AuthenticationManager authenticationManager,
                           JwtTokenProvider jwtTokenProvider,
-                          TokenBlacklistService tokenBlacklistService) {
+                          TokenBlacklistService tokenBlacklistService,
+                          UserService userService) {
         this.authenticationManager = authenticationManager;
         this.jwtTokenProvider = jwtTokenProvider;
         this.tokenBlacklistService = tokenBlacklistService;
+        this.userService = userService;
     }
 
     @PostMapping("/login")
@@ -105,5 +112,35 @@ public class AuthController {
         }
         // Always return 200 — don't reveal whether the token was valid
         return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/change-password")
+    @Operation(summary = "Change the authenticated user's password",
+               description = "Verifies the current password then replaces it with the new one. "
+                           + "The caller's active token remains valid; log out explicitly to invalidate it.")
+    @SecurityRequirement(name = "bearerAuth")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Password changed successfully"),
+        @ApiResponse(responseCode = "400", description = "Validation error in request body"),
+        @ApiResponse(responseCode = "401", description = "Current password is incorrect or no valid token provided")
+    })
+    public ResponseEntity<Object> changePassword(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @Valid @RequestBody ChangePasswordRequest request) {
+        try {
+            userService.changePassword(
+                    userDetails.getUsername(),
+                    request.getCurrentPassword(),
+                    request.getNewPassword());
+            return ResponseEntity.ok().build();
+        } catch (BadCredentialsException e) {
+            logger.warn("Password change rejected for user '{}': {}", userDetails.getUsername(), e.getMessage());
+            ErrorResponse error = ErrorResponse.of(
+                    HttpStatus.UNAUTHORIZED.value(),
+                    "Unauthorized",
+                    "Current password is incorrect",
+                    "/api/v1/auth/change-password");
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(error);
+        }
     }
 }

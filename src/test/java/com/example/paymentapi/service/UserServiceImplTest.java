@@ -8,6 +8,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.util.Optional;
 
@@ -21,11 +25,13 @@ class UserServiceImplTest {
     @Mock
     private UserRepository userRepository;
 
+    private PasswordEncoder passwordEncoder;
     private UserServiceImpl userService;
 
     @BeforeEach
     void setUp() {
-        userService = new UserServiceImpl(userRepository);
+        passwordEncoder = new BCryptPasswordEncoder();
+        userService = new UserServiceImpl(userRepository, passwordEncoder);
     }
 
     @Test
@@ -64,5 +70,53 @@ class UserServiceImplTest {
 
         verify(userRepository, times(1)).findByUsername("testuser");
         verifyNoMoreInteractions(userRepository);
+    }
+
+    // ── changePassword ─────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("changePassword succeeds when current password matches")
+    void changePassword_correctCurrentPassword_savesNewHash() {
+        String rawCurrent = "oldPass1";
+        User user = new User();
+        user.setId(1L);
+        user.setUsername("alice");
+        user.setPassword(passwordEncoder.encode(rawCurrent));
+        user.setRole("ROLE_USER");
+
+        when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
+        when(userRepository.save(any(User.class))).thenAnswer(i -> i.getArgument(0));
+
+        userService.changePassword("alice", rawCurrent, "newSecurePass");
+
+        verify(userRepository).save(user);
+        assertTrue(passwordEncoder.matches("newSecurePass", user.getPassword()),
+                "Saved password hash should match the new password");
+    }
+
+    @Test
+    @DisplayName("changePassword throws BadCredentialsException when current password is wrong")
+    void changePassword_wrongCurrentPassword_throws() {
+        User user = new User();
+        user.setId(1L);
+        user.setUsername("alice");
+        user.setPassword(passwordEncoder.encode("realPassword"));
+        user.setRole("ROLE_USER");
+
+        when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
+
+        assertThrows(BadCredentialsException.class,
+                () -> userService.changePassword("alice", "wrongPassword", "newPass123"));
+
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("changePassword throws UsernameNotFoundException when user does not exist")
+    void changePassword_unknownUser_throws() {
+        when(userRepository.findByUsername("ghost")).thenReturn(Optional.empty());
+
+        assertThrows(UsernameNotFoundException.class,
+                () -> userService.changePassword("ghost", "any", "newPass123"));
     }
 }
