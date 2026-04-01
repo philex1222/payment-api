@@ -112,6 +112,7 @@ public class PaymentServiceImpl implements PaymentService {
         payment.setCurrency(paymentRequest.getCurrency());
         payment.setStatus(PaymentStatus.PENDING.getCode());
         payment.setCreatedBy(currentUsername());
+        payment.setDescription(paymentRequest.getDescription());
         Payment createdPayment = paymentRepository.save(payment);
         logger.info("Payment created with ID: {}", createdPayment.getId());
 
@@ -165,6 +166,7 @@ public class PaymentServiceImpl implements PaymentService {
                 .destinationAccount(maskAccount(createdPayment.getDestinationAccount()))
                 .amount(createdPayment.getAmount())
                 .currency(createdPayment.getCurrency())
+                .description(createdPayment.getDescription())
                 .status(createdPayment.getStatus())
                 .statusDescription(PaymentStatus.fromString(createdPayment.getStatus()).getDescription())
                 .createdAt(createdPayment.getCreatedAt())
@@ -479,6 +481,7 @@ public class PaymentServiceImpl implements PaymentService {
                 .destinationAccount(maskAccount(payment.getDestinationAccount()))
                 .amount(payment.getAmount())
                 .currency(payment.getCurrency())
+                .description(payment.getDescription())
                 .status(payment.getStatus())
                 .statusDescription(status.getDescription())
                 .createdAt(payment.getCreatedAt())

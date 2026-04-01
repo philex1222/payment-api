@@ -10,12 +10,15 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.ServletWebRequest;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.NoHandlerFoundException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
@@ -165,6 +168,34 @@ public class PaymentExceptionHandler {
                 HttpStatus.METHOD_NOT_ALLOWED, "Method Not Allowed",
                 String.format("HTTP method '%s' is not supported for this endpoint", ex.getMethod()), request);
         return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED).body(error);
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ErrorResponse> handleAccessDeniedException(
+            AccessDeniedException ex, WebRequest request) {
+        logger.warn("Access denied: {}", ex.getMessage());
+        ErrorResponse error = createErrorResponse(
+                HttpStatus.FORBIDDEN, "Forbidden", "Access denied: insufficient permissions", request);
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(error);
+    }
+
+    @ExceptionHandler(NoHandlerFoundException.class)
+    public ResponseEntity<ErrorResponse> handleNoHandlerFoundException(
+            NoHandlerFoundException ex, WebRequest request) {
+        logger.warn("No handler found: {} {}", ex.getHttpMethod(), ex.getRequestURL());
+        ErrorResponse error = createErrorResponse(
+                HttpStatus.NOT_FOUND, "Not Found",
+                "No endpoint found for " + ex.getHttpMethod() + " " + ex.getRequestURL(), request);
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
+    }
+
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ErrorResponse> handleNoResourceFoundException(
+            NoResourceFoundException ex, WebRequest request) {
+        logger.warn("Resource not found: {}", ex.getMessage());
+        ErrorResponse error = createErrorResponse(
+                HttpStatus.NOT_FOUND, "Not Found", "The requested resource was not found", request);
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

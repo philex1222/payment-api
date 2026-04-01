@@ -41,4 +41,9 @@ public class PaymentRequest {
     @Pattern(regexp = "[A-Z]{3}", message = "Currency must be a 3-letter ISO 4217 code (uppercase)")
     @Schema(description = "ISO 4217 currency code", example = "USD")
     private String currency;
+
+    @Size(max = 255, message = "Description cannot exceed 255 characters")
+    @Schema(description = "Optional payment reference or description (e.g. invoice number, memo)",
+            example = "Invoice #INV-2026-001")
+    private String description;
 }

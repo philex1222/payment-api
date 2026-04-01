@@ -60,6 +60,13 @@ public class Payment {
     private int retryCount = 0;
 
     /**
+     * Optional free-text description or payment reference supplied by the initiator
+     * (e.g. invoice number, memo). Never contains PII — treat as an audit note.
+     */
+    @Column(name = "description", length = 255)
+    private String description;
+
+    /**
      * Username of the authenticated user who created this payment.
      * Used for ownership checks (BOLA prevention).
      * Nullable for backwards compatibility with rows created before this column was added.

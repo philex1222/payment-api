@@ -70,8 +70,11 @@ public class RateLimitInterceptor implements HandlerInterceptor {
 
         if (!allowRequest) {
             logger.warn("Rate limit exceeded for client: {}", maskClientId(clientId));
+            long retryAfterSeconds =
+                    rateLimiter.getRateLimiterConfig().getLimitRefreshPeriod().toSeconds();
             response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
             response.setContentType("application/json;charset=UTF-8");
+            response.addHeader("Retry-After", String.valueOf(retryAfterSeconds));
             response.getWriter().write(
                     "{\"status\":429,\"error\":\"Too Many Requests\","
                     + "\"message\":\"Rate limit exceeded. Please try again later.\"}");

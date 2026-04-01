@@ -97,8 +97,8 @@ public class SecurityConfig {
                 .anyRequest().authenticated()
             )
 
-            // Return 401 (not 403) for requests with missing/invalid credentials so clients
-            // can distinguish "not authenticated" from "authenticated but not authorised".
+            // Return 401/403 JSON for missing/invalid credentials and access-denied cases so
+            // clients can distinguish "not authenticated" from "authenticated but not authorised".
             .exceptionHandling(ex -> ex
                 .authenticationEntryPoint((request, response, authException) -> {
                     response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
@@ -106,6 +106,13 @@ public class SecurityConfig {
                     response.getWriter().write(
                         "{\"status\":401,\"error\":\"Unauthorized\","
                         + "\"message\":\"Authentication required\"}");
+                })
+                .accessDeniedHandler((request, response, accessDeniedException) -> {
+                    response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                    response.setContentType("application/json;charset=UTF-8");
+                    response.getWriter().write(
+                        "{\"status\":403,\"error\":\"Forbidden\","
+                        + "\"message\":\"Access denied: insufficient permissions\"}");
                 })
             )
 

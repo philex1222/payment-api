@@ -17,6 +17,10 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.context.request.ServletWebRequest;
 import org.springframework.web.context.request.WebRequest;
 
+import org.springframework.http.HttpHeaders;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.web.servlet.NoHandlerFoundException;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 @DisplayName("PaymentExceptionHandler Tests")
@@ -246,6 +250,47 @@ class PaymentExceptionHandlerTest {
 
             assertNotNull(response.getBody());
             assertTrue(response.getBody().getMessage().contains("PATCH"));
+        }
+    }
+
+    @Nested
+    @DisplayName("AccessDeniedException Handler Tests")
+    class AccessDeniedExceptionTests {
+
+        @Test
+        @DisplayName("Should return 403 FORBIDDEN for AccessDeniedException")
+        void handleAccessDeniedException_returns403() {
+            AccessDeniedException ex = new AccessDeniedException("Access denied");
+
+            ResponseEntity<ErrorResponse> response =
+                    exceptionHandler.handleAccessDeniedException(ex, webRequest);
+
+            assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
+            assertNotNull(response.getBody());
+            assertEquals(403, response.getBody().getStatus());
+            assertEquals("Forbidden", response.getBody().getError());
+            assertEquals("Access denied: insufficient permissions", response.getBody().getMessage());
+        }
+    }
+
+    @Nested
+    @DisplayName("NoHandlerFoundException Handler Tests")
+    class NoHandlerFoundExceptionTests {
+
+        @Test
+        @DisplayName("Should return 404 NOT_FOUND for NoHandlerFoundException")
+        void handleNoHandlerFoundException_returns404() {
+            NoHandlerFoundException ex =
+                    new NoHandlerFoundException("GET", "/api/v1/unknown", new HttpHeaders());
+
+            ResponseEntity<ErrorResponse> response =
+                    exceptionHandler.handleNoHandlerFoundException(ex, webRequest);
+
+            assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
+            assertNotNull(response.getBody());
+            assertEquals(404, response.getBody().getStatus());
+            assertEquals("Not Found", response.getBody().getError());
+            assertTrue(response.getBody().getMessage().contains("/api/v1/unknown"));
         }
     }
 

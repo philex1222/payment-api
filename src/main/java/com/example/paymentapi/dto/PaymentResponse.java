@@ -39,6 +39,8 @@ public class PaymentResponse {
     @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
     private LocalDateTime updatedAt;
 
+    private String description;
+
     private String transactionId;
 
     private String message;
