@@ -24,6 +24,10 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
+import com.example.paymentapi.exception.UserNotFoundException;
+
+import org.springframework.security.test.context.support.WithMockUser;
+
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -146,6 +150,36 @@ class AdminControllerTest {
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(req)))
                     .andExpect(status().isBadRequest());
+        }
+
+        @Test
+        @DisplayName("Returns 404 when user not found")
+        void returns404ForUnknownUser() throws Exception {
+            when(adminService.updateUserRole(any(), any()))
+                    .thenThrow(new UserNotFoundException("User not found with id: 999"));
+
+            mockMvc.perform(patch("/api/v1/admin/users/999/role")
+                            .header("Authorization", adminToken)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(new RoleUpdateRequest("ROLE_USER"))))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.status").value(404))
+                    .andExpect(jsonPath("$.error").value("User Not Found"));
+        }
+    }
+
+    @Nested
+    @DisplayName("Admin endpoint access control")
+    class AccessControlTests {
+
+        @Test
+        @WithMockUser(username = "regularuser", roles = "USER")
+        @DisplayName("Returns 403 for USER role on admin stats endpoint")
+        void nonAdminGets403OnStats() throws Exception {
+            // @WithMockUser sets USER role in SecurityContext; JWT filter leaves it intact
+            // since there is no Bearer token header on this request.
+            mockMvc.perform(get("/api/v1/admin/stats"))
+                    .andExpect(status().isForbidden());
         }
     }
 }

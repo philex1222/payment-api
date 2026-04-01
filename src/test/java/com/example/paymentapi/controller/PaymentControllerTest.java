@@ -235,6 +235,13 @@ public class PaymentControllerTest {
     }
 
     @Test
+    public void testGetPayments_invalidAmountRange_returns400() throws Exception {
+        mockMvc.perform(get("/api/v1/payments?amountFrom=500&amountTo=100")
+                        .header("Authorization", token))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     public void testCancelPayment_pendingPayment_returns200() throws Exception {
         PaymentResponse cancelled = new PaymentResponse();
         cancelled.setId("pay-1");
