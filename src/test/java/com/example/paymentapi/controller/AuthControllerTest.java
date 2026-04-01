@@ -29,12 +29,15 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
 
+import java.util.Optional;
+
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -214,6 +217,34 @@ class AuthControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(
                                 new ChangePasswordRequest("old", "newPass123"))))
+                .andExpect(status().isUnauthorized());
+    }
+
+    // ── GET /me ───────────────────────────────────────────────────────────────
+
+    @Test
+    @WithMockUser(username = "admin", roles = "ADMIN")
+    @DisplayName("GET /me returns profile for authenticated user")
+    void getMe_authenticated_returnsProfile() throws Exception {
+        when(rateLimitInterceptor.preHandle(any(), any(), any())).thenReturn(true);
+
+        com.example.paymentapi.model.User admin = new com.example.paymentapi.model.User();
+        admin.setUsername("admin");
+        admin.setRole("ROLE_ADMIN");
+        when(userService.findByUsername("admin")).thenReturn(Optional.of(admin));
+
+        mockMvc.perform(get("/api/v1/auth/me"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.username").value("admin"))
+                .andExpect(jsonPath("$.role").value("ROLE_ADMIN"));
+    }
+
+    @Test
+    @DisplayName("GET /me without authentication returns 401")
+    void getMe_unauthenticated_returns401() throws Exception {
+        when(rateLimitInterceptor.preHandle(any(), any(), any())).thenReturn(true);
+
+        mockMvc.perform(get("/api/v1/auth/me"))
                 .andExpect(status().isUnauthorized());
     }
 }

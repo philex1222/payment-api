@@ -4,6 +4,8 @@ import com.example.paymentapi.dto.ChangePasswordRequest;
 import com.example.paymentapi.dto.ErrorResponse;
 import com.example.paymentapi.dto.LoginRequest;
 import com.example.paymentapi.dto.LoginResponse;
+import com.example.paymentapi.dto.UserProfileResponse;
+import com.example.paymentapi.exception.UserNotFoundException;
 import com.example.paymentapi.security.JwtTokenProvider;
 import com.example.paymentapi.service.TokenBlacklistService;
 import com.example.paymentapi.service.UserService;
@@ -23,6 +25,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -142,5 +145,20 @@ public class AuthController {
                     "/api/v1/auth/change-password");
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(error);
         }
+    }
+
+    @GetMapping("/me")
+    @Operation(summary = "Get the authenticated user's profile",
+               description = "Returns the id, username, and role of the currently authenticated principal.")
+    @SecurityRequirement(name = "bearerAuth")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Profile returned successfully"),
+        @ApiResponse(responseCode = "401", description = "No valid Bearer token provided")
+    })
+    public ResponseEntity<UserProfileResponse> getProfile(
+            @AuthenticationPrincipal UserDetails userDetails) {
+        com.example.paymentapi.model.User user = userService.findByUsername(userDetails.getUsername())
+                .orElseThrow(() -> new UserNotFoundException("User not found: " + userDetails.getUsername()));
+        return ResponseEntity.ok(new UserProfileResponse(user.getId(), user.getUsername(), user.getRole()));
     }
 }

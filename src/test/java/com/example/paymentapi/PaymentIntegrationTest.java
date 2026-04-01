@@ -597,6 +597,86 @@ public class PaymentIntegrationTest {
         }
     }
 
+    @Nested
+    @DisplayName("Filter-level access control (JSON 403 body)")
+    class SecurityBoundaryTests {
+
+        @Test
+        @DisplayName("USER JWT accessing admin endpoint returns 403 with JSON error body")
+        void testUserJwt_accessAdminEndpoint_returns403WithJsonBody() throws Exception {
+            // Obtain a token for the regular "user" account
+            LoginRequest userLogin = new LoginRequest();
+            userLogin.setUsername("user");
+            userLogin.setPassword("password");
+            String userJson = mockMvc.perform(post("/api/v1/auth/login")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(userLogin)))
+                    .andExpect(status().isOk())
+                    .andReturn().getResponse().getContentAsString();
+            String userToken = "Bearer " + objectMapper.readValue(userJson, LoginResponse.class).getToken();
+
+            // USER JWT hits admin-only endpoint → security filter chain denies → accessDeniedHandler
+            mockMvc.perform(get("/api/v1/admin/stats")
+                            .header("Authorization", userToken))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.status").value(403))
+                    .andExpect(jsonPath("$.error").value("Forbidden"));
+        }
+
+        @Test
+        @DisplayName("Request without token to secured endpoint returns 401 with JSON error body")
+        void testNoToken_securedEndpoint_returns401WithJsonBody() throws Exception {
+            mockMvc.perform(get("/api/v1/payments"))
+                    .andExpect(status().isUnauthorized())
+                    .andExpect(jsonPath("$.status").value(401))
+                    .andExpect(jsonPath("$.error").value("Unauthorized"));
+        }
+    }
+
+    @Nested
+    @DisplayName("GET /api/v1/auth/me — user profile endpoint")
+    class UserProfileTests {
+
+        @Test
+        @DisplayName("Admin JWT returns admin profile")
+        void testGetMe_adminJwt_returnsAdminProfile() throws Exception {
+            mockMvc.perform(get("/api/v1/auth/me")
+                            .header("Authorization", authToken))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.username").value("admin"))
+                    .andExpect(jsonPath("$.role").value("ROLE_ADMIN"))
+                    .andExpect(jsonPath("$.id").isNumber());
+        }
+
+        @Test
+        @DisplayName("User JWT returns user profile")
+        void testGetMe_userJwt_returnsUserProfile() throws Exception {
+            LoginRequest userLogin = new LoginRequest();
+            userLogin.setUsername("user");
+            userLogin.setPassword("password");
+            String userJson = mockMvc.perform(post("/api/v1/auth/login")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(userLogin)))
+                    .andExpect(status().isOk())
+                    .andReturn().getResponse().getContentAsString();
+            String userToken = "Bearer " + objectMapper.readValue(userJson, LoginResponse.class).getToken();
+
+            mockMvc.perform(get("/api/v1/auth/me")
+                            .header("Authorization", userToken))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.username").value("user"))
+                    .andExpect(jsonPath("$.role").value("ROLE_USER"))
+                    .andExpect(jsonPath("$.id").isNumber());
+        }
+
+        @Test
+        @DisplayName("Unauthenticated request returns 401")
+        void testGetMe_noToken_returns401() throws Exception {
+            mockMvc.perform(get("/api/v1/auth/me"))
+                    .andExpect(status().isUnauthorized());
+        }
+    }
+
     // Helper methods
 
     private PaymentRequest createValidPaymentRequest() {
