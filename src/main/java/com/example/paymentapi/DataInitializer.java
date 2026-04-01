@@ -26,17 +26,26 @@ public class DataInitializer implements CommandLineRunner {
     public void run(String... args) {
         // Only create admin user if it doesn't exist
         if (userRepository.findByUsername("admin").isEmpty()) {
-            User user = new User();
-            user.setUsername("admin");
-            user.setPassword(passwordEncoder.encode("password"));
+            User admin = new User();
+            admin.setUsername("admin");
+            admin.setPassword(passwordEncoder.encode("password"));
             // ROLE_ADMIN grants access to payment endpoints (hasAnyRole USER/ADMIN)
             // plus actuator and /api/v1/admin/** endpoints
-            user.setRole("ROLE_ADMIN");
-
-            userRepository.save(user);
+            admin.setRole("ROLE_ADMIN");
+            userRepository.save(admin);
             logger.info("Created default admin user");
         } else {
             logger.info("Admin user already exists, skipping creation");
+        }
+
+        // Seed a regular user for testing non-admin payment flows (BOLA, role separation)
+        if (userRepository.findByUsername("user").isEmpty()) {
+            User regularUser = new User();
+            regularUser.setUsername("user");
+            regularUser.setPassword(passwordEncoder.encode("password"));
+            regularUser.setRole("ROLE_USER");
+            userRepository.save(regularUser);
+            logger.info("Created default regular user");
         }
     }
 }

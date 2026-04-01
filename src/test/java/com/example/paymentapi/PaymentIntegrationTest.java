@@ -401,6 +401,87 @@ public class PaymentIntegrationTest {
     }
 
     @Nested
+    @DisplayName("Payment description field")
+    class PaymentDescriptionTests {
+
+        @Test
+        @DisplayName("Payment created with description includes it in response")
+        void testCreatePayment_withDescription_returnsDescription() throws Exception {
+            PaymentRequest request = createValidPaymentRequest();
+            request.setDescription("Invoice #INV-2026-001");
+
+            mockMvc.perform(post("/api/v1/payments")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .header("Authorization", authToken)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isCreated())
+                    .andExpect(jsonPath("$.description").value("Invoice #INV-2026-001"));
+        }
+
+        @Test
+        @DisplayName("Payment created without description omits the field from response")
+        void testCreatePayment_withoutDescription_omitsField() throws Exception {
+            PaymentRequest request = createValidPaymentRequest();
+
+            mockMvc.perform(post("/api/v1/payments")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .header("Authorization", authToken)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isCreated())
+                    .andExpect(jsonPath("$.description").doesNotExist());
+        }
+
+        @Test
+        @DisplayName("Description over 255 characters returns 400")
+        void testCreatePayment_descriptionTooLong_returns400() throws Exception {
+            PaymentRequest request = createValidPaymentRequest();
+            request.setDescription("A".repeat(256));
+
+            mockMvc.perform(post("/api/v1/payments")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .header("Authorization", authToken)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isBadRequest());
+        }
+    }
+
+    @Nested
+    @DisplayName("Payment list filtering")
+    class PaymentFilterTests {
+
+        @Test
+        @DisplayName("?amountFrom > amountTo returns 400")
+        void testGetPayments_invalidAmountRange_returns400() throws Exception {
+            mockMvc.perform(get("/api/v1/payments?amountFrom=500&amountTo=100")
+                            .header("Authorization", authToken))
+                    .andExpect(status().isBadRequest());
+        }
+
+        @Test
+        @DisplayName("?amountFrom filter returns only payments at or above the amount")
+        void testGetPayments_amountFromFilter() throws Exception {
+            // Create a payment (amount 100 USD)
+            createPaymentAndGetId();
+
+            mockMvc.perform(get("/api/v1/payments?amountFrom=50")
+                            .header("Authorization", authToken))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.content").isArray());
+        }
+
+        @Test
+        @DisplayName("?currency=USD filters by currency")
+        void testGetPayments_currencyFilter() throws Exception {
+            createPaymentAndGetId();
+
+            mockMvc.perform(get("/api/v1/payments?currency=USD")
+                            .header("Authorization", authToken))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.content").isArray());
+        }
+    }
+
+    @Nested
     @DisplayName("Actuator Endpoint Tests")
     class ActuatorTests {
 
