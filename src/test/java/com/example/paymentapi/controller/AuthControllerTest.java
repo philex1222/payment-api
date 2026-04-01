@@ -1,5 +1,6 @@
 package com.example.paymentapi.controller;
 
+import com.example.paymentapi.config.LoginRateLimitInterceptor;
 import com.example.paymentapi.config.RateLimitInterceptor;
 import com.example.paymentapi.config.SecurityConfig;
 import com.example.paymentapi.dto.ChangePasswordRequest;
@@ -68,9 +69,18 @@ class AuthControllerTest {
     @MockBean
     private UserService userService;
 
-    // Mock out the interceptor so @WebMvcTest does not need RateLimitProperties on classpath
+    // Mock out the interceptors so @WebMvcTest does not need RateLimitProperties on classpath
     @MockBean
     private RateLimitInterceptor rateLimitInterceptor;
+
+    @MockBean
+    private LoginRateLimitInterceptor loginRateLimitInterceptor;
+
+    @org.junit.jupiter.api.BeforeEach
+    void allowAllRequests() throws Exception {
+        when(rateLimitInterceptor.preHandle(any(), any(), any())).thenReturn(true);
+        when(loginRateLimitInterceptor.preHandle(any(), any(), any())).thenReturn(true);
+    }
 
     @Test
     @DisplayName("Login with valid credentials returns 200 and JWT token")

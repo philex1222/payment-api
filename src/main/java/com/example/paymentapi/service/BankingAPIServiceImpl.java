@@ -17,6 +17,18 @@ import java.util.concurrent.ConcurrentHashMap;
  * Resilience patterns applied:
  * - @CircuitBreaker  – opens after 50 % failure rate over 10 calls, waits 30 s before half-opening.
  * - @Retry           – retries transient failures up to 3 times with exponential back-off.
+ *
+ * NOTE — @TimeLimiter is intentionally NOT applied here.
+ * Resilience4j's @TimeLimiter AOP aspect only enforces a wall-clock timeout when the
+ * annotated method returns a CompletableFuture (or a reactive type).  Applying it to
+ * these synchronous void/boolean methods has no effect — the aspect simply delegates
+ * through without scheduling a cancel.
+ *
+ * TODO: When this service is replaced by a real async banking-API client
+ * (e.g. WebClient / async RestClient), convert the return types to
+ * CompletableFuture<T>, add @TimeLimiter(name = "bankingApi") to each method,
+ * and update the fallback signatures accordingly.  The timelimiter properties
+ * in application.properties already capture the intended 5-second SLA.
  */
 @Service
 public class BankingAPIServiceImpl implements BankingAPIService {
