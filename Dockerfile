@@ -32,6 +32,11 @@ RUN java -Djarmode=layertools -jar app.jar extract
 FROM eclipse-temurin:17-jre-alpine
 WORKDIR /app
 
+# Upgrade all Alpine packages to apply latest security patches before locking
+# down to a non-root user. This catches OS-level CVEs (e.g. gnutls, libexpat)
+# that may not yet be reflected in the upstream eclipse-temurin tag.
+RUN apk upgrade --no-cache
+
 # wget ships with Alpine by default — no extra package needed for the HEALTHCHECK
 
 # Create a dedicated non-root user; UID 1000 matches the Helm podSecurityContext
