@@ -60,6 +60,20 @@ jobs:
           format: "ALL"
           args: ${{ steps.owasp-args.outputs.value }} --out reports
 
+      - name: Summarise OWASP findings
+        if: always()
+        run: |
+          if [ -f reports/dependency-check-report.sarif ]; then
+            TOTAL=$(jq '[.runs[].results[]] | length' \
+              reports/dependency-check-report.sarif 2>/dev/null || echo "?")
+            {
+              echo "### OWASP Dependency-Check"
+              echo "**Total findings (all severities):** ${TOTAL}"
+              echo ""
+              echo "Full report available in the workflow artifacts."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: Upload SARIF to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v4
         if: always()
@@ -103,9 +117,13 @@ jobs:
       - name: Skip scan — image not available
         if: steps.pull-image.outcome == 'failure'
         run: |
-          echo "### Trivy Container Scan — Skipped" >> "$GITHUB_STEP_SUMMARY"
-          echo "The \`latest\` tag has not been published yet (CD has not run)." >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "### Trivy Container Scan — Skipped"
+            echo "The \`latest\` tag has not been published yet (CD has not run)."
+          } >> "$GITHUB_STEP_SUMMARY"
 
+      # Scheduled scan reports ALL severities (including unfixed) for full
+      # visibility — this is monitoring/audit, not a merge gate.
       - name: Scan with Trivy (all severities)
         if: steps.pull-image.outcome == 'success'
         uses: aquasecurity/trivy-action@v0.35.0
@@ -116,6 +134,17 @@ jobs:
           severity: CRITICAL,HIGH,MEDIUM
           exit-code: "0"
           ignore-unfixed: "false"
+
+      - name: Summarise Trivy container scan findings
+        if: steps.pull-image.outcome == 'success'
+        run: |
+          if [ -f trivy-image.sarif ]; then
+            TOTAL=$(jq '[.runs[].results[]] | length' trivy-image.sarif 2>/dev/null || echo "?")
+            {
+              echo "### Trivy Container Scan"
+              echo "**Total findings (CRITICAL+HIGH+MEDIUM, including unfixed):** ${TOTAL}"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Upload Trivy SARIF to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v4
@@ -156,6 +185,17 @@ jobs:
           severity: CRITICAL,HIGH,MEDIUM
           exit-code: "0"
           scanners: vuln,secret,misconfig
+
+      - name: Summarise Trivy repository scan findings
+        if: always()
+        run: |
+          if [ -f trivy-repo.sarif ]; then
+            TOTAL=$(jq '[.runs[].results[]] | length' trivy-repo.sarif 2>/dev/null || echo "?")
+            {
+              echo "### Trivy Repository Scan"
+              echo "**Total findings (vuln + secrets + misconfig, CRITICAL–MEDIUM):** ${TOTAL}"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Upload SARIF to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v4

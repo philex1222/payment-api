@@ -51,9 +51,11 @@ jobs:
       - name: Checkout source code
         uses: actions/checkout@v6
 
+      # Use the $GITHUB_SHA builtin env var — avoids injecting the expression
+      # directly into a shell command (defence-in-depth against injection).
       - name: Compute short SHA tag
         id: short-sha
-        run: echo "tag=sha-$(echo '${{ github.sha }}' | cut -c1-7)" >> "$GITHUB_OUTPUT"
+        run: echo "tag=sha-$(echo "${GITHUB_SHA}" | cut -c1-7)" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -67,7 +69,7 @@ jobs:
 
       - name: Extract Docker image metadata (tags & labels)
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ghcr.io/${{ github.repository }}
           tags: |
@@ -92,17 +94,25 @@ jobs:
           provenance: true
           sbom: true
 
+      # All GitHub expressions are moved into env vars before the shell runs.
+      # This prevents expression values from being interpreted as shell code.
       - name: Write image summary
+        env:
+          IMAGE_DIGEST: ${{ steps.build-push.outputs.digest }}
+          IMAGE_TAG: ${{ steps.short-sha.outputs.tag }}
+          IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
         run: |
-          echo "### Docker Image Published" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "**Digest:** \`${{ steps.build-push.outputs.digest }}\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "**Tag:** \`${{ steps.short-sha.outputs.tag }}\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "**All tags:**" >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-          echo "${{ steps.meta.outputs.tags }}" >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "### Docker Image Published"
+            echo ""
+            echo "**Digest:** \`${IMAGE_DIGEST}\`"
+            echo "**Tag:** \`${IMAGE_TAG}\`"
+            echo ""
+            echo "**All tags:**"
+            echo '```'
+            echo "${IMAGE_TAGS}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
   # ── 2. Deploy to Staging ────────────────────────────────────────────────────
   deploy-staging:
@@ -137,9 +147,11 @@ jobs:
         run: |
           if [ -z "$KUBE_CONFIG" ]; then
             echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "### Staging Deployment — Skipped" >> "$GITHUB_STEP_SUMMARY"
-            echo "⚠️ \`KUBE_CONFIG\` secret not set in the **staging** environment." >> "$GITHUB_STEP_SUMMARY"
-            echo "Add a base64-encoded kubeconfig to enable Kubernetes deployments." >> "$GITHUB_STEP_SUMMARY"
+            {
+              echo "### Staging Deployment — Skipped"
+              echo "⚠️ \`KUBE_CONFIG\` secret not set in the **staging** environment."
+              echo "Add a base64-encoded kubeconfig to enable Kubernetes deployments."
+            } >> "$GITHUB_STEP_SUMMARY"
           else
             echo "configured=true" >> "$GITHUB_OUTPUT"
           fi
@@ -169,7 +181,7 @@ jobs:
         run: |
           kubectl create secret docker-registry ghcr-pull-secret \
             --docker-server=ghcr.io \
-            --docker-username="${{ github.actor }}" \
+            --docker-username="${GITHUB_ACTOR}" \
             --docker-password="${GHCR_PAT}" \
             --namespace=payment-staging \
             --dry-run=client -o yaml | kubectl apply -f -
@@ -179,24 +191,31 @@ jobs:
         # Requires the helm-diff plugin; install it once per runner environment.
         # If the plugin is not available the step is skipped gracefully.
         continue-on-error: true
+        env:
+          IMAGE_TAG: ${{ needs.publish-image.outputs.image-tag }}
         run: |
-          helm plugin install https://github.com/databus23/helm-diff --version 3.9.9 2>/dev/null || true
+          helm plugin install https://github.com/databus23/helm-diff \
+            --version 3.9.9 2>/dev/null || true
           helm diff upgrade payment-api ./helm/payment-api \
             -f helm/payment-api/values-staging.yaml \
-            --set image.tag="${{ needs.publish-image.outputs.image-tag }}" \
+            --set image.tag="${IMAGE_TAG}" \
             --namespace payment-staging \
             --allow-unreleased \
             --no-color 2>&1 | tee helm-diff-staging.txt
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-          cat helm-diff-staging.txt >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo '```'
+            cat helm-diff-staging.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Helm upgrade — Staging
         if: steps.check-cluster.outputs.configured == 'true'
+        env:
+          IMAGE_TAG: ${{ needs.publish-image.outputs.image-tag }}
         run: |
           helm upgrade --install payment-api ./helm/payment-api \
             -f helm/payment-api/values-staging.yaml \
-            --set image.tag="${{ needs.publish-image.outputs.image-tag }}" \
+            --set image.tag="${IMAGE_TAG}" \
             --namespace payment-staging \
             --create-namespace \
             --atomic \
@@ -213,16 +232,21 @@ jobs:
 
       - name: Write staging deployment summary
         if: steps.check-cluster.outputs.configured == 'true'
+        env:
+          IMAGE_TAG: ${{ needs.publish-image.outputs.image-tag }}
+          IMAGE_DIGEST: ${{ needs.publish-image.outputs.image-digest }}
         run: |
-          echo "### Staging Deployment" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Field | Value |" >> "$GITHUB_STEP_SUMMARY"
-          echo "|-------|-------|" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Environment | staging |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Image tag | \`${{ needs.publish-image.outputs.image-tag }}\` |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Image digest | \`${{ needs.publish-image.outputs.image-digest }}\` |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Run number | ${{ github.run_number }} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Triggered by | ${{ github.actor }} |" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "### Staging Deployment"
+            echo ""
+            echo "| Field | Value |"
+            echo "|-------|-------|"
+            echo "| Environment | staging |"
+            echo "| Image tag | \`${IMAGE_TAG}\` |"
+            echo "| Image digest | \`${IMAGE_DIGEST}\` |"
+            echo "| Run number | ${GITHUB_RUN_NUMBER} |"
+            echo "| Triggered by | ${GITHUB_ACTOR} |"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   # ── 3. Deploy to Production ─────────────────────────────────────────────────
   # Production deploys are MANUAL ONLY (workflow_dispatch) and require:
@@ -258,9 +282,11 @@ jobs:
         run: |
           if [ -z "$KUBE_CONFIG" ]; then
             echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "### Production Deployment — Skipped" >> "$GITHUB_STEP_SUMMARY"
-            echo "⚠️ \`KUBE_CONFIG\` secret not set in the **production** environment." >> "$GITHUB_STEP_SUMMARY"
-            echo "Add a base64-encoded kubeconfig to enable Kubernetes deployments." >> "$GITHUB_STEP_SUMMARY"
+            {
+              echo "### Production Deployment — Skipped"
+              echo "⚠️ \`KUBE_CONFIG\` secret not set in the **production** environment."
+              echo "Add a base64-encoded kubeconfig to enable Kubernetes deployments."
+            } >> "$GITHUB_STEP_SUMMARY"
           else
             echo "configured=true" >> "$GITHUB_OUTPUT"
           fi
@@ -287,7 +313,7 @@ jobs:
         run: |
           kubectl create secret docker-registry ghcr-pull-secret \
             --docker-server=ghcr.io \
-            --docker-username="${{ github.actor }}" \
+            --docker-username="${GITHUB_ACTOR}" \
             --docker-password="${GHCR_PAT}" \
             --namespace=payment-prod \
             --dry-run=client -o yaml | kubectl apply -f -
@@ -295,24 +321,31 @@ jobs:
       - name: Helm diff (dry-run preview)
         if: steps.check-cluster.outputs.configured == 'true'
         continue-on-error: true
+        env:
+          IMAGE_TAG: ${{ needs.publish-image.outputs.image-tag }}
         run: |
-          helm plugin install https://github.com/databus23/helm-diff --version 3.9.9 2>/dev/null || true
+          helm plugin install https://github.com/databus23/helm-diff \
+            --version 3.9.9 2>/dev/null || true
           helm diff upgrade payment-api ./helm/payment-api \
             -f helm/payment-api/values-prod.yaml \
-            --set image.tag="${{ needs.publish-image.outputs.image-tag }}" \
+            --set image.tag="${IMAGE_TAG}" \
             --namespace payment-prod \
             --allow-unreleased \
             --no-color 2>&1 | tee helm-diff-prod.txt
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-          cat helm-diff-prod.txt >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo '```'
+            cat helm-diff-prod.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Helm upgrade — Production
         if: steps.check-cluster.outputs.configured == 'true'
+        env:
+          IMAGE_TAG: ${{ needs.publish-image.outputs.image-tag }}
         run: |
           helm upgrade --install payment-api ./helm/payment-api \
             -f helm/payment-api/values-prod.yaml \
-            --set image.tag="${{ needs.publish-image.outputs.image-tag }}" \
+            --set image.tag="${IMAGE_TAG}" \
             --namespace payment-prod \
             --create-namespace \
             --atomic \
@@ -329,14 +362,19 @@ jobs:
 
       - name: Write production deployment summary
         if: steps.check-cluster.outputs.configured == 'true'
+        env:
+          IMAGE_TAG: ${{ needs.publish-image.outputs.image-tag }}
+          IMAGE_DIGEST: ${{ needs.publish-image.outputs.image-digest }}
         run: |
-          echo "### Production Deployment" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Field | Value |" >> "$GITHUB_STEP_SUMMARY"
-          echo "|-------|-------|" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Environment | production |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Image tag | \`${{ needs.publish-image.outputs.image-tag }}\` |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Image digest | \`${{ needs.publish-image.outputs.image-digest }}\` |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Run number | ${{ github.run_number }} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Deployed by | ${{ github.actor }} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Commit | ${{ github.sha }} |" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "### Production Deployment"
+            echo ""
+            echo "| Field | Value |"
+            echo "|-------|-------|"
+            echo "| Environment | production |"
+            echo "| Image tag | \`${IMAGE_TAG}\` |"
+            echo "| Image digest | \`${IMAGE_DIGEST}\` |"
+            echo "| Run number | ${GITHUB_RUN_NUMBER} |"
+            echo "| Deployed by | ${GITHUB_ACTOR} |"
+            echo "| Commit | ${GITHUB_SHA} |"
+          } >> "$GITHUB_STEP_SUMMARY"

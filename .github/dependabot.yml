@@ -15,6 +15,8 @@ updates:
       - java
     assignees:
       - PhilipW1222
+    reviewers:
+      - PhilipW1222
     commit-message:
       prefix: "chore(deps)"
       include: "scope"
@@ -59,11 +61,14 @@ updates:
       day: monday
       time: "09:00"
       timezone: "UTC"
+    open-pull-requests-limit: 5
     rebase-strategy: auto
     labels:
       - dependencies
       - docker
     assignees:
+      - PhilipW1222
+    reviewers:
       - PhilipW1222
     commit-message:
       prefix: "chore(deps)"
@@ -82,11 +87,14 @@ updates:
       day: monday
       time: "09:00"
       timezone: "UTC"
+    open-pull-requests-limit: 10
     rebase-strategy: auto
     labels:
       - dependencies
       - github-actions
     assignees:
+      - PhilipW1222
+    reviewers:
       - PhilipW1222
     commit-message:
       prefix: "chore(deps)"
@@ -96,3 +104,34 @@ updates:
     ignore:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
+    # Group actions by vendor into a single PR to reduce review noise.
+    # Each vendor group produces at most one PR per weekly run.
+    groups:
+      actions-core:
+        patterns:
+          - "actions/*"
+        update-types:
+          - "minor"
+          - "patch"
+      docker-actions:
+        patterns:
+          - "docker/*"
+        update-types:
+          - "minor"
+          - "patch"
+      github-security:
+        patterns:
+          - "github/codeql-action*"
+        update-types:
+          - "minor"
+          - "patch"
+      third-party-actions:
+        patterns:
+          - "aquasecurity/*"
+          - "azure/*"
+          - "dorny/*"
+          - "dependency-check/*"
+          - "anthropics/*"
+        update-types:
+          - "minor"
+          - "patch"

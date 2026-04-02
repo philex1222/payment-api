@@ -54,6 +54,32 @@ jobs:
           mvn --batch-mode --no-transfer-progress clean verify \
               -Dspring.profiles.active=test
 
+      - name: Summarise test results
+        if: always()
+        run: |
+          REPORT_DIR="target/surefire-reports"
+          if compgen -G "${REPORT_DIR}/*.xml" > /dev/null 2>&1; then
+            TESTS=$(grep -rh 'tests="' "${REPORT_DIR}"/*.xml \
+              | grep -oP 'tests="\K[0-9]+' | awk '{s+=$1} END {print s+0}')
+            FAILURES=$(grep -rh 'failures="' "${REPORT_DIR}"/*.xml \
+              | grep -oP 'failures="\K[0-9]+' | awk '{s+=$1} END {print s+0}')
+            ERRORS=$(grep -rh 'errors="' "${REPORT_DIR}"/*.xml \
+              | grep -oP 'errors="\K[0-9]+' | awk '{s+=$1} END {print s+0}')
+            SKIPPED=$(grep -rh 'skipped="' "${REPORT_DIR}"/*.xml \
+              | grep -oP 'skipped="\K[0-9]+' | awk '{s+=$1} END {print s+0}')
+            PASSED=$(( TESTS - FAILURES - ERRORS - SKIPPED ))
+            {
+              echo "### Test Results"
+              echo "| Status   | Count |"
+              echo "|----------|-------|"
+              echo "| Passed   | ${PASSED} |"
+              echo "| Failed   | ${FAILURES} |"
+              echo "| Errors   | ${ERRORS} |"
+              echo "| Skipped  | ${SKIPPED} |"
+              echo "| **Total** | **${TESTS}** |"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: Publish JUnit test results as Check Run
         uses: dorny/test-reporter@v3
         if: always()
@@ -79,7 +105,115 @@ jobs:
           retention-days: 7
           if-no-files-found: error
 
-  # ── 2. Docker build + Trivy CVE scan (runs in parallel with job 3) ──────────
+  # ── 2. CodeQL SAST — static analysis for security vulnerabilities ────────────
+  # Runs in parallel with build-and-test — CodeQL instruments its own build.
+  # Detects: SQL injection, path traversal, unsafe deserialization, XSS, etc.
+  codeql-analysis:
+    name: CodeQL SAST
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    permissions:
+      actions: read          # required by codeql-action to read workflow metadata
+      contents: read
+      security-events: write # upload results to GitHub Security tab
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v6
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }} (Temurin)
+        uses: actions/setup-java@v5
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: temurin
+          cache: maven
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: java
+          # '+' prefix extends the default query set with ~50 additional security
+          # checks including injection, path traversal, and crypto weaknesses.
+          queries: +security-extended
+
+      # Build must run between init and analyze so CodeQL can instrument it.
+      # Compile-only is sufficient — CodeQL analyses bytecode, not test results.
+      - name: Build for CodeQL analysis
+        run: mvn --batch-mode --no-transfer-progress compile -q
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: codeql-java
+
+  # ── 3. Trivy filesystem scan — secrets & misconfigs on every push ───────────
+  # Runs in parallel (no dependency on build-and-test).
+  # Catches hardcoded secrets, vulnerable dependencies, and IaC misconfigurations
+  # before they reach a built image or a production deployment.
+  trivy-fs-scan:
+    name: Trivy Filesystem & Secrets Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v6
+
+      # Secret scan: fail the build immediately if any secret pattern is found.
+      # This is a hard gate — committed secrets are always wrong.
+      - name: Scan for hardcoded secrets (blocking)
+        uses: aquasecurity/trivy-action@v0.35.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: table
+          exit-code: "1"
+          scanners: secret
+
+      # Vulnerability + misconfiguration scan: informational, SARIF upload only.
+      # Enforcement is handled by the container scan (job 4) and OWASP (job 5).
+      - name: Scan for CVEs and misconfigurations (informational)
+        uses: aquasecurity/trivy-action@v0.35.0
+        if: always()
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: sarif
+          output: trivy-fs.sarif
+          severity: CRITICAL,HIGH,MEDIUM
+          exit-code: "0"
+          scanners: vuln,misconfig
+
+      - name: Upload SARIF to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v4
+        if: always()
+        with:
+          sarif_file: trivy-fs.sarif
+          category: trivy-filesystem-ci
+
+      - name: Summarise filesystem scan findings
+        if: always()
+        run: |
+          if [ -f trivy-fs.sarif ]; then
+            TOTAL=$(jq '[.runs[].results[]] | length' trivy-fs.sarif 2>/dev/null || echo "?")
+            echo "**Trivy filesystem findings (CVE + misconfig, CRITICAL–MEDIUM): ${TOTAL}**" \
+              >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload Trivy filesystem SARIF as artifact
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: trivy-fs-sarif
+          path: trivy-fs.sarif
+          retention-days: 14
+
+  # ── 4. Docker build + Trivy CVE scan (runs after tests pass) ────────────────
   docker-scan:
     name: Docker Build & Trivy Scan
     runs-on: ubuntu-latest
@@ -107,6 +241,9 @@ jobs:
           cache-to: type=gha,mode=max
           load: true
 
+      # Gate: fail if there are CRITICAL or HIGH CVEs that have a fix available.
+      # ignore-unfixed=true skips CVEs with no patch yet (nothing actionable).
+      # When this fails, update the base image or vulnerable dependency.
       - name: Scan image with Trivy (CRITICAL & HIGH CVEs)
         uses: aquasecurity/trivy-action@v0.35.0
         with:
@@ -114,8 +251,8 @@ jobs:
           format: sarif
           output: trivy-results.sarif
           severity: CRITICAL,HIGH
-          exit-code: "0"
-          ignore-unfixed: "true"
+          exit-code: "1"          # fail on fixable CRITICAL/HIGH CVEs
+          ignore-unfixed: "true"  # skip CVEs with no available fix
 
       - name: Upload Trivy SARIF to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v4
@@ -123,6 +260,15 @@ jobs:
         with:
           sarif_file: trivy-results.sarif
           category: trivy-container
+
+      - name: Summarise Trivy container scan findings
+        if: always()
+        run: |
+          if [ -f trivy-results.sarif ]; then
+            TOTAL=$(jq '[.runs[].results[]] | length' trivy-results.sarif 2>/dev/null || echo "?")
+            echo "**Trivy container findings (CRITICAL+HIGH, fixable only): ${TOTAL}**" \
+              >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Upload Trivy SARIF as artifact
         uses: actions/upload-artifact@v7
@@ -132,7 +278,7 @@ jobs:
           path: trivy-results.sarif
           retention-days: 14
 
-  # ── 3. OWASP Dependency-Check for known CVEs in Maven deps ─────────────────
+  # ── 5. OWASP Dependency-Check for known CVEs in Maven deps ─────────────────
   owasp-check:
     name: OWASP Dependency Check
     runs-on: ubuntu-latest
@@ -156,16 +302,17 @@ jobs:
             owasp-nvd-${{ runner.os }}-
 
       # Build args conditionally — passing --nvdApiKey with an empty value
-      # causes the tool to exit immediately with "Missing argument for option".
-      # The NVD_API_KEY secret is optional; without it the tool still works
-      # but NVD database downloads are rate-limited and slower.
+      # causes the tool to exit with "Missing argument for option".
       - name: Set OWASP Dependency-Check arguments
         id: owasp-args
         shell: bash
         env:
           NVD_KEY: ${{ secrets.NVD_API_KEY }}
         run: |
-          ARGS="--failOnCVSS 9 --enableRetired"
+          # Fail on CVSS ≥ 7.0 (High severity and above).
+          # This is appropriate for a payment API where HIGH vulnerabilities
+          # in direct dependencies represent real exploitability risk.
+          ARGS="--failOnCVSS 7 --enableRetired"
           if [ -n "$NVD_KEY" ]; then
             ARGS="$ARGS --nvdApiKey $NVD_KEY"
           fi
@@ -178,6 +325,15 @@ jobs:
           path: .
           format: SARIF
           args: ${{ steps.owasp-args.outputs.value }} --out reports
+
+      - name: Summarise OWASP findings
+        if: always()
+        run: |
+          if [ -f reports/dependency-check-report.sarif ]; then
+            TOTAL=$(jq '[.runs[].results[]] | length' \
+              reports/dependency-check-report.sarif 2>/dev/null || echo "?")
+            echo "**OWASP Dependency-Check findings: ${TOTAL}**" >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Upload SARIF to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v4
