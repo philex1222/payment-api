@@ -18,8 +18,12 @@ updates:
     commit-message:
       prefix: "chore(deps)"
       include: "scope"
-    # Group all Spring Boot / Spring Framework patch & minor updates into a
-    # single PR to reduce noise; major bumps still get individual PRs.
+    # Block major version bumps for all dependencies — major updates require
+    # deliberate migration work and must not be applied automatically.
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    # Group minor+patch updates for noisy dependency families into a single PR
     groups:
       spring-boot:
         patterns:
@@ -59,6 +63,11 @@ updates:
     commit-message:
       prefix: "chore(deps)"
       include: "scope"
+    # Block major base-image version bumps (e.g. Java 17 → 21 or 25);
+    # those are intentional decisions that need manual review.
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   # ── GitHub Actions workflow dependencies ───────────────────────────────────
   - package-ecosystem: github-actions
@@ -77,3 +86,8 @@ updates:
     commit-message:
       prefix: "chore(deps)"
       include: "scope"
+    # Allow minor/patch action updates; major action versions (e.g. v3 → v4)
+    # require manual testing since they can change inputs/outputs/runtime.
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
