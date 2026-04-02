@@ -27,7 +27,7 @@ env:
 jobs:
 # ─────────────────────────────────────────────────────────────────────────────
 
-  # ── 1. Compile · Test · Enforce JaCoCo ≥70% line coverage ──────────────────
+  # ── 1. Compile · Test · Enforce JaCoCo ≥75% line coverage ──────────────────
   build-and-test:
     name: Build, Test & Coverage
     runs-on: ubuntu-latest
@@ -172,7 +172,7 @@ jobs:
           echo "value=$ARGS" >> "$GITHUB_OUTPUT"
 
       - name: Run OWASP Dependency-Check
-        uses: dependency-check/Dependency-Check_Action@main
+        uses: dependency-check/Dependency-Check_Action@1.1.0
         with:
           project: payment-api
           path: .

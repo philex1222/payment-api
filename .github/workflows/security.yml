@@ -8,6 +8,12 @@ on:
 permissions:
   contents: read
 
+# One run at a time — if a scheduled run is still in progress when the next
+# schedule fires (or a manual dispatch arrives), queue rather than cancel.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
 # ─────────────────────────────────────────────────────────────────────────────
 jobs:
 # ─────────────────────────────────────────────────────────────────────────────
@@ -47,7 +53,7 @@ jobs:
           echo "value=$ARGS" >> "$GITHUB_OUTPUT"
 
       - name: Run OWASP Dependency-Check (all severities)
-        uses: dependency-check/Dependency-Check_Action@main
+        uses: dependency-check/Dependency-Check_Action@1.1.0
         with:
           project: payment-api
           path: .
@@ -89,10 +95,20 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # If CD has never run the ':latest' tag won't exist yet — skip gracefully.
       - name: Pull latest image from GHCR
+        id: pull-image
+        continue-on-error: true
         run: docker pull ghcr.io/${{ github.repository }}:latest
 
+      - name: Skip scan — image not available
+        if: steps.pull-image.outcome == 'failure'
+        run: |
+          echo "### Trivy Container Scan — Skipped" >> "$GITHUB_STEP_SUMMARY"
+          echo "The \`latest\` tag has not been published yet (CD has not run)." >> "$GITHUB_STEP_SUMMARY"
+
       - name: Scan with Trivy (all severities)
+        if: steps.pull-image.outcome == 'success'
         uses: aquasecurity/trivy-action@v0.35.0
         with:
           image-ref: ghcr.io/${{ github.repository }}:latest
@@ -104,14 +120,14 @@ jobs:
 
       - name: Upload Trivy SARIF to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v4
-        if: always()
+        if: steps.pull-image.outcome == 'success'
         with:
           sarif_file: trivy-image.sarif
           category: trivy-scheduled
 
       - name: Upload Trivy SARIF as artifact
         uses: actions/upload-artifact@v7
-        if: always()
+        if: steps.pull-image.outcome == 'success'
         with:
           name: trivy-image-scan-${{ github.run_id }}
           path: trivy-image.sarif

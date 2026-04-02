@@ -9,22 +9,38 @@ updates:
       time: "09:00"
       timezone: "UTC"
     open-pull-requests-limit: 10
+    rebase-strategy: auto
     labels:
       - dependencies
       - java
-    # Group all patch and minor Spring Boot updates into a single PR to reduce noise
+    assignees:
+      - PhilipW1222
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+    # Group all Spring Boot / Spring Framework patch & minor updates into a
+    # single PR to reduce noise; major bumps still get individual PRs.
     groups:
       spring-boot:
         patterns:
           - "org.springframework.boot:*"
           - "org.springframework:*"
           - "org.springframework.security:*"
+        update-types:
+          - "minor"
+          - "patch"
       resilience4j:
         patterns:
           - "io.github.resilience4j:*"
+        update-types:
+          - "minor"
+          - "patch"
       jjwt:
         patterns:
           - "io.jsonwebtoken:*"
+        update-types:
+          - "minor"
+          - "patch"
 
   # ── Docker base images (Dockerfile) ────────────────────────────────────────
   - package-ecosystem: docker
@@ -34,9 +50,15 @@ updates:
       day: monday
       time: "09:00"
       timezone: "UTC"
+    rebase-strategy: auto
     labels:
       - dependencies
       - docker
+    assignees:
+      - PhilipW1222
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
 
   # ── GitHub Actions workflow dependencies ───────────────────────────────────
   - package-ecosystem: github-actions
@@ -46,6 +68,12 @@ updates:
       day: monday
       time: "09:00"
       timezone: "UTC"
+    rebase-strategy: auto
     labels:
       - dependencies
       - github-actions
+    assignees:
+      - PhilipW1222
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"

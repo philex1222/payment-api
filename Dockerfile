@@ -32,8 +32,7 @@ RUN java -Djarmode=layertools -jar app.jar extract
 FROM eclipse-temurin:17-jre-alpine
 WORKDIR /app
 
-# Install curl for the HEALTHCHECK below (minimal addition to slim image)
-RUN apk add --no-cache curl
+# wget ships with Alpine by default — no extra package needed for the HEALTHCHECK
 
 # Create a dedicated non-root user; UID 1000 matches the Helm podSecurityContext
 RUN addgroup -S -g 1000 appuser && adduser -S -u 1000 -G appuser appuser
@@ -52,9 +51,9 @@ USER appuser
 
 EXPOSE 8080
 
-# Health check via Spring Boot Actuator (requires curl installed above)
+# Health check via Spring Boot Actuator (wget is pre-installed in Alpine)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD curl -sf http://localhost:8080/actuator/health || exit 1
+    CMD wget --no-verbose --tries=1 --spider http://localhost:8080/actuator/health || exit 1
 
 # JVM flags: use container memory limits, heap dump to writable /tmp
 ENV JAVA_OPTS="\
@@ -65,6 +64,9 @@ ENV JAVA_OPTS="\
   -XX:HeapDumpPath=/tmp/heap-dump.hprof \
   -Djava.security.egd=file:/dev/./urandom"
 
-# Launch via the Spring Boot layered launcher (not the fat JAR directly)
+# Launch via the Spring Boot layered launcher (not the fat JAR directly).
+# 'exec' replaces the shell with the JVM process, making Java PID 1 so that
+# SIGTERM from 'docker stop' / Kubernetes pod termination is forwarded directly
+# to the JVM and Spring Boot can perform a graceful shutdown.
 ENTRYPOINT ["sh", "-c", \
-  "java $JAVA_OPTS org.springframework.boot.loader.launch.JarLauncher"]
+  "exec java $JAVA_OPTS org.springframework.boot.loader.launch.JarLauncher"]
