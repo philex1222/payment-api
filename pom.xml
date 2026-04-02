@@ -6,7 +6,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.4.5</version>
+        <version>3.5.13</version>
         <relativePath/> <!-- lookup parent from repository -->
     </parent>
     <groupId>com.example</groupId>
@@ -19,6 +19,17 @@
         <jjwt.version>0.13.0</jjwt.version>
         <springdoc.version>2.8.9</springdoc.version>
         <resilience4j.version>2.4.0</resilience4j.version>
+        <!--
+          Override embedded Tomcat to pick up all HIGH CVEs patched after
+          the Spring Boot 3.5.13 BOM was cut:
+            CVE-2025-48988 (fixed 10.1.42) — multipart DoS
+            CVE-2025-52520 (fixed 10.1.43) — integer overflow multipart
+            CVE-2025-53506 (fixed 10.1.43) — HTTP/2 resource exhaustion
+            CVE-2025-48989 (fixed 10.1.44) — HTTP/2 MadeYouReset DoS
+            CVE-2025-55752 (fixed 10.1.45) — path traversal + RCE via rewrite
+            CVE-2026-24734 (fixed 10.1.52) — OCSP revocation bypass
+        -->
+        <tomcat.version>10.1.52</tomcat.version>
     </properties>
 
     <dependencyManagement>
