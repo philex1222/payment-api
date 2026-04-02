@@ -23,6 +23,11 @@ updates:
     ignore:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
+      # springdoc 2.8.10–2.8.16 introduced a PatternParseException regression in its
+      # WebJar resource handler (invalid ** path pattern breaks Spring MVC startup).
+      # Ignore this broken range; re-evaluate when 2.8.17+ is available.
+      - dependency-name: "org.springdoc:springdoc-openapi-starter-webmvc-ui"
+        versions: [">= 2.8.10, <= 2.8.16"]
     # Group minor+patch updates for noisy dependency families into a single PR
     groups:
       spring-boot:
