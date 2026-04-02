@@ -58,8 +58,7 @@ jobs:
           project: payment-api
           path: .
           format: "ALL"
-          out: reports
-          args: ${{ steps.owasp-args.outputs.value }}
+          args: ${{ steps.owasp-args.outputs.value }} --out reports
 
       - name: Upload SARIF to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v4
