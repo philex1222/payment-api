@@ -4,6 +4,8 @@ import com.example.paymentapi.model.AuditLog;
 import com.example.paymentapi.repository.AuditLogRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -42,10 +44,26 @@ public class AuditServiceImpl implements AuditService {
             auditLog.setPaymentId(paymentId);
             auditLog.setEvent(event);
             auditLog.setTimestamp(LocalDateTime.now());
+            auditLog.setPerformedBy(resolveActor());
             auditLogRepository.save(auditLog);
         } catch (Exception ex) {
             // Audit failure must never propagate and disrupt the payment operation.
             logger.error("Failed to persist audit event for payment {}: {}", paymentId, ex.getMessage(), ex);
         }
+    }
+
+    /**
+     * Resolves the current actor from the SecurityContext.
+     * Returns "system" when no security context is present (scheduled jobs).
+     * Returns "anonymous" for unauthenticated requests that somehow reach
+     * an audit point (should not happen in practice).
+     */
+    private String resolveActor() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated()) {
+            return "system";
+        }
+        String name = auth.getName();
+        return (name == null || name.equals("anonymousUser")) ? "anonymous" : name;
     }
 }

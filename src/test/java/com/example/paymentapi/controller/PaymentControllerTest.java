@@ -242,6 +242,28 @@ public class PaymentControllerTest {
     }
 
     @Test
+    public void testRetryPayment_failedPayment_returns200() throws Exception {
+        PaymentResponse retried = new PaymentResponse();
+        retried.setId("pay-failed");
+        retried.setStatus("COMPLETED");
+        retried.setCreatedAt(LocalDateTime.now());
+
+        when(paymentService.retryPayment("pay-failed")).thenReturn(retried);
+
+        mockMvc.perform(post("/api/v1/payments/pay-failed/retry")
+                        .header("Authorization", token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value("pay-failed"))
+                .andExpect(jsonPath("$.status").value("COMPLETED"));
+    }
+
+    @Test
+    public void testRetryPayment_requiresAuthentication() throws Exception {
+        mockMvc.perform(post("/api/v1/payments/pay-1/retry"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     public void testCancelPayment_pendingPayment_returns200() throws Exception {
         PaymentResponse cancelled = new PaymentResponse();
         cancelled.setId("pay-1");

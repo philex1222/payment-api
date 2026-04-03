@@ -194,7 +194,7 @@ public class PaymentExceptionHandler {
         logger.warn("No handler found: {} {}", ex.getHttpMethod(), ex.getRequestURL());
         ErrorResponse error = createErrorResponse(
                 HttpStatus.NOT_FOUND, "Not Found",
-                "No endpoint found for " + ex.getHttpMethod() + " " + ex.getRequestURL(), request);
+                "The requested resource was not found", request);
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
     }
 

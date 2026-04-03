@@ -186,6 +186,21 @@ public class PaymentController {
         return ResponseEntity.noContent().build();
     }
 
+    @PostMapping("/{id}/retry")
+    @Operation(summary = "Retry a failed payment",
+               description = "Re-attempts a FAILED payment. Returns 409 if the payment is not in FAILED status.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Retry initiated successfully"),
+        @ApiResponse(responseCode = "404", description = "Payment not found"),
+        @ApiResponse(responseCode = "409", description = "Payment is not in FAILED status"),
+        @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    public ResponseEntity<PaymentResponse> retryPayment(
+            @Parameter(description = "Payment UUID", required = true)
+            @PathVariable String id) {
+        return ResponseEntity.ok(paymentService.retryPayment(id));
+    }
+
     @PostMapping("/{id}/reversal")
     @Operation(summary = "Initiate a payment reversal or partial refund")
     @ApiResponses({

@@ -46,6 +46,20 @@ class AuditServiceImplTest {
         assertEquals("PAYMENT_CREATED", saved.getEvent());
         assertNotNull(saved.getTimestamp());
         assertTrue(saved.getTimestamp().isBefore(LocalDateTime.now().plusSeconds(1)));
+        // No security context in unit tests → actor falls back to "system"
+        assertEquals("system", saved.getPerformedBy());
+    }
+
+    @Test
+    @DisplayName("Should record 'system' as actor when no SecurityContext is present")
+    void logPaymentEvent_noSecurityContext_usesSystemActor() {
+        when(auditLogRepository.save(any(AuditLog.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        auditService.logPaymentEvent("payment-005", "PAYMENT_CREATED");
+
+        ArgumentCaptor<AuditLog> captor = ArgumentCaptor.forClass(AuditLog.class);
+        verify(auditLogRepository).save(captor.capture());
+        assertEquals("system", captor.getValue().getPerformedBy());
     }
 
     @Test

@@ -290,7 +290,7 @@ class PaymentExceptionHandlerTest {
             assertNotNull(response.getBody());
             assertEquals(404, response.getBody().getStatus());
             assertEquals("Not Found", response.getBody().getError());
-            assertTrue(response.getBody().getMessage().contains("/api/v1/unknown"));
+            assertEquals("The requested resource was not found", response.getBody().getMessage());
         }
     }
 

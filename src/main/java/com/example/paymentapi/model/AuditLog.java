@@ -32,6 +32,15 @@ public class AuditLog {
     @Column(nullable = false)
     private LocalDateTime timestamp;
 
+    /**
+     * Username of the principal who triggered the event.
+     * Populated automatically from the SecurityContext; set to "system"
+     * for events triggered by scheduled jobs (no security context present).
+     * Nullable for backwards compatibility with rows created before V7 migration.
+     */
+    @Column(name = "performed_by", length = 50)
+    private String performedBy;
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
