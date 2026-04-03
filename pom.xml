@@ -42,6 +42,18 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+            <!--
+              Pin commons-lang3 to 3.18.0 — fixes CVE-2025-48924
+              (StackOverflowError via ClassUtils.getClass on long inputs).
+              Transitive via springdoc → swagger-core-jakarta → commons-lang3.
+              Spring Boot BOM ships 3.17.0; Trivy rates this CVE as HIGH
+              (vendor-adjusted) despite the NVD CVSS base score of 6.5.
+            -->
+            <dependency>
+                <groupId>org.apache.commons</groupId>
+                <artifactId>commons-lang3</artifactId>
+                <version>3.18.0</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
