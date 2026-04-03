@@ -17,6 +17,7 @@ import com.example.paymentapi.repository.PaymentSpecification;
 import io.micrometer.core.instrument.Timer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
@@ -39,6 +40,9 @@ import java.util.stream.Collectors;
 public class PaymentServiceImpl implements PaymentService {
 
     private static final Logger logger = LoggerFactory.getLogger(PaymentServiceImpl.class);
+
+    @Value("${scheduler.retry.max-attempts:3}")
+    private int maxRetryAttempts;
 
     private final PaymentRepository paymentRepository;
     private final TransactionService transactionService;
@@ -365,6 +369,11 @@ public class PaymentServiceImpl implements PaymentService {
 
             payment.setStatus(newStatus.getCode());
             Payment updatedPayment = paymentRepository.save(payment);
+            if (newStatus == PaymentStatus.REVERSED) {
+                paymentMetrics.incrementReversed();
+            } else {
+                paymentMetrics.incrementRefunded();
+            }
             logger.info("Payment {} reversed successfully", id);
 
             // Log the payment reversal event with details
@@ -434,6 +443,13 @@ public class PaymentServiceImpl implements PaymentService {
         PaymentStatus currentStatus = PaymentStatus.fromString(payment.getStatus());
         if (currentStatus != PaymentStatus.FAILED) {
             throw new InvalidStatusTransitionException(id, currentStatus, PaymentStatus.PENDING);
+        }
+
+        if (payment.getRetryCount() >= maxRetryAttempts) {
+            logger.warn("Payment {} has reached the maximum retry limit ({}/{})",
+                    id, payment.getRetryCount(), maxRetryAttempts);
+            throw new IllegalStateException(
+                    "Payment has reached the maximum retry limit of " + maxRetryAttempts);
         }
 
         int attempt = payment.getRetryCount() + 1;

@@ -20,16 +20,18 @@
         <springdoc.version>2.8.9</springdoc.version>
         <resilience4j.version>2.4.0</resilience4j.version>
         <!--
-          Override embedded Tomcat to pick up all HIGH CVEs patched after
-          the Spring Boot 3.5.13 BOM was cut:
+          Pin Tomcat to the version shipped by the Spring Boot 3.5.13 BOM (10.1.53),
+          which covers all HIGH CVEs up to the BOM cut date:
             CVE-2025-48988 (fixed 10.1.42) — multipart DoS
             CVE-2025-52520 (fixed 10.1.43) — integer overflow multipart
             CVE-2025-53506 (fixed 10.1.43) — HTTP/2 resource exhaustion
             CVE-2025-48989 (fixed 10.1.44) — HTTP/2 MadeYouReset DoS
             CVE-2025-55752 (fixed 10.1.45) — path traversal + RCE via rewrite
             CVE-2026-24734 (fixed 10.1.52) — OCSP revocation bypass
+          Keeping the explicit property so any future Trivy gate failure makes
+          the intended version immediately visible in pom.xml.
         -->
-        <tomcat.version>10.1.52</tomcat.version>
+        <tomcat.version>10.1.53</tomcat.version>
     </properties>
 
     <dependencyManagement>

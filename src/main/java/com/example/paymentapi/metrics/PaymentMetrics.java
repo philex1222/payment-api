@@ -20,6 +20,8 @@ public class PaymentMetrics {
     private final Counter paymentsCancelled;
     private final Counter paymentsRetried;
     private final Counter paymentsRetriedSuccess;
+    private final Counter paymentsReversed;
+    private final Counter paymentsRefunded;
     private final Timer paymentDuration;
     private final MeterRegistry registry;
 
@@ -50,6 +52,14 @@ public class PaymentMetrics {
                 .description("Total number of payment retries that succeeded")
                 .register(registry);
 
+        paymentsReversed = Counter.builder("payment.reversed")
+                .description("Total number of full payment reversals processed")
+                .register(registry);
+
+        paymentsRefunded = Counter.builder("payment.refunded")
+                .description("Total number of partial refunds processed")
+                .register(registry);
+
         paymentDuration = Timer.builder("payment.processing.duration")
                 .description("End-to-end payment processing time from creation to terminal state")
                 .publishPercentiles(0.5, 0.95, 0.99)
@@ -78,6 +88,14 @@ public class PaymentMetrics {
 
     public void incrementRetriedSuccess() {
         paymentsRetriedSuccess.increment();
+    }
+
+    public void incrementReversed() {
+        paymentsReversed.increment();
+    }
+
+    public void incrementRefunded() {
+        paymentsRefunded.increment();
     }
 
     /** Start a timing sample — call {@link #stopTimer(Timer.Sample)} when the operation ends. */

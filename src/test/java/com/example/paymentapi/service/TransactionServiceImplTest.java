@@ -11,6 +11,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -111,5 +112,29 @@ class TransactionServiceImplTest {
 
         assertThrows(TransactionNotFoundException.class,
                 () -> transactionService.updateTransactionStatus("missing", "SUCCESS"));
+    }
+
+    @Test
+    @DisplayName("getTransactionsByPaymentId returns all transactions for the payment")
+    void getTransactionsByPaymentId_returnsAll() {
+        Transaction tx1 = savedTransaction("tx-001", "p-001", "SUCCESS");
+        Transaction tx2 = savedTransaction("tx-002", "p-001", "FAILED");
+        when(transactionRepository.findByPaymentId("p-001")).thenReturn(List.of(tx1, tx2));
+
+        List<Transaction> result = transactionService.getTransactionsByPaymentId("p-001");
+
+        assertEquals(2, result.size());
+        assertEquals("tx-001", result.get(0).getId());
+        assertEquals("tx-002", result.get(1).getId());
+    }
+
+    @Test
+    @DisplayName("getTransactionsByPaymentId returns empty list when no transactions exist")
+    void getTransactionsByPaymentId_empty() {
+        when(transactionRepository.findByPaymentId("p-none")).thenReturn(List.of());
+
+        List<Transaction> result = transactionService.getTransactionsByPaymentId("p-none");
+
+        assertTrue(result.isEmpty());
     }
 }

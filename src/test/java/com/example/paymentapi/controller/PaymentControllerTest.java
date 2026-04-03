@@ -5,8 +5,10 @@ import com.example.paymentapi.dto.LoginRequest;
 import com.example.paymentapi.dto.LoginResponse;
 import com.example.paymentapi.dto.PaymentRequest;
 import com.example.paymentapi.dto.PaymentResponse;
+import com.example.paymentapi.model.Transaction;
 import com.example.paymentapi.service.IdempotencyService;
 import com.example.paymentapi.service.PaymentService;
+import com.example.paymentapi.service.TransactionService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -52,6 +54,9 @@ public class PaymentControllerTest {
 
     @MockBean
     private IdempotencyService idempotencyService;
+
+    @MockBean
+    private TransactionService transactionService;
 
     @Autowired
     private ObjectMapper objectMapper;
@@ -276,5 +281,33 @@ public class PaymentControllerTest {
                         .header("Authorization", token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("CANCELLED"));
+    }
+
+    @Test
+    public void testGetTransactions_returnsListForPayment() throws Exception {
+        PaymentResponse paymentResponse = new PaymentResponse();
+        paymentResponse.setId("pay-1");
+        paymentResponse.setStatus("COMPLETED");
+        paymentResponse.setCreatedAt(LocalDateTime.now());
+
+        Transaction tx = new Transaction();
+        tx.setId("tx-001");
+        tx.setPaymentId("pay-1");
+        tx.setStatus("SUCCESS");
+
+        when(paymentService.getPaymentById("pay-1")).thenReturn(paymentResponse);
+        when(transactionService.getTransactionsByPaymentId("pay-1")).thenReturn(List.of(tx));
+
+        mockMvc.perform(get("/api/v1/payments/pay-1/transactions")
+                        .header("Authorization", token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value("tx-001"))
+                .andExpect(jsonPath("$[0].status").value("SUCCESS"));
+    }
+
+    @Test
+    public void testGetTransactions_requiresAuthentication() throws Exception {
+        mockMvc.perform(get("/api/v1/payments/pay-1/transactions"))
+                .andExpect(status().isUnauthorized());
     }
 }

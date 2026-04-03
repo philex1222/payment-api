@@ -3,8 +3,12 @@ package com.example.paymentapi.model;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.annotation.LastModifiedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import jakarta.persistence.*;
+import java.time.LocalDateTime;
 import java.util.Objects;
 
 /**
@@ -17,6 +21,7 @@ import java.util.Objects;
 @NoArgsConstructor
 @Entity
 @Table(name = "transactions")
+@EntityListeners(AuditingEntityListener.class)
 public class Transaction {
 
     @Id
@@ -33,6 +38,14 @@ public class Transaction {
     @Column(name = "failure_reason")
     private String failureReason;
 
+    @CreatedDate
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private LocalDateTime createdAt;
+
+    @LastModifiedDate
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
@@ -47,6 +60,7 @@ public class Transaction {
 
     @Override
     public String toString() {
-        return "Transaction{id='" + id + "', paymentId='" + paymentId + "', status='" + status + "'}";
+        return "Transaction{id='" + id + "', paymentId='" + paymentId + "', status='" + status
+                + "', createdAt=" + createdAt + '}';
     }
 }

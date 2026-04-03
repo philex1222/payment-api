@@ -4,8 +4,10 @@ import com.example.paymentapi.dto.PaymentRequest;
 import com.example.paymentapi.dto.PaymentResponse;
 import com.example.paymentapi.dto.PaymentStatusRequest;
 import com.example.paymentapi.dto.ReversalRequest;
+import com.example.paymentapi.dto.TransactionResponse;
 import com.example.paymentapi.service.IdempotencyService;
 import com.example.paymentapi.service.PaymentService;
+import com.example.paymentapi.service.TransactionService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -38,10 +40,14 @@ public class PaymentController {
 
     private final PaymentService paymentService;
     private final IdempotencyService idempotencyService;
+    private final TransactionService transactionService;
 
-    public PaymentController(PaymentService paymentService, IdempotencyService idempotencyService) {
+    public PaymentController(PaymentService paymentService,
+                             IdempotencyService idempotencyService,
+                             TransactionService transactionService) {
         this.paymentService = paymentService;
         this.idempotencyService = idempotencyService;
+        this.transactionService = transactionService;
     }
 
     @PostMapping
@@ -169,6 +175,29 @@ public class PaymentController {
             @Parameter(description = "Payment UUID", required = true)
             @PathVariable String id) {
         return ResponseEntity.ok(paymentService.cancelPayment(id));
+    }
+
+    @GetMapping("/{id}/transactions")
+    @Operation(summary = "List transactions for a payment",
+               description = "Returns all transaction records associated with the given payment. "
+                           + "Non-admin users may only retrieve transactions for payments they own.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Transactions retrieved successfully"),
+        @ApiResponse(responseCode = "404", description = "Payment not found"),
+        @ApiResponse(responseCode = "403", description = "Access denied: payment belongs to another user"),
+        @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    public ResponseEntity<List<TransactionResponse>> getTransactionsByPaymentId(
+            @Parameter(description = "Payment UUID", required = true)
+            @PathVariable String id) {
+        // Ownership is enforced inside getPaymentById — if the caller doesn't own this
+        // payment the call throws AccessDeniedException before we touch transactions.
+        paymentService.getPaymentById(id);
+        List<TransactionResponse> txns = transactionService.getTransactionsByPaymentId(id)
+                .stream()
+                .map(TransactionResponse::from)
+                .toList();
+        return ResponseEntity.ok(txns);
     }
 
     @DeleteMapping("/{id}")

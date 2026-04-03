@@ -32,6 +32,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -86,6 +87,8 @@ public class PaymentServiceTest {
                 notificationService,
                 paymentMetrics
         );
+        // @Value fields are not injected in plain Mockito tests — set them via reflection
+        ReflectionTestUtils.setField(paymentService, "maxRetryAttempts", 3);
     }
 
     @AfterEach
@@ -549,6 +552,68 @@ public class PaymentServiceTest {
 
             assertThrows(PaymentNotFoundException.class,
                     () -> paymentService.initiatePaymentReversal("nonexistent", createReversalRequest()));
+        }
+    }
+
+    @Nested
+    @DisplayName("RetryPayment Tests")
+    class RetryPaymentTests {
+
+        @Test
+        @DisplayName("Should throw InvalidStatusTransitionException when payment is not FAILED")
+        void retryPayment_notFailed_throws() {
+            Payment payment = createPayment("pay-1", "PENDING");
+            when(paymentRepository.findById("pay-1")).thenReturn(Optional.of(payment));
+
+            assertThrows(InvalidStatusTransitionException.class,
+                    () -> paymentService.retryPayment("pay-1"));
+        }
+
+        @Test
+        @DisplayName("Should throw IllegalStateException when max retry limit is reached")
+        void retryPayment_maxLimitReached_throws() {
+            Payment payment = createPayment("pay-2", "FAILED");
+            payment.setRetryCount(3); // equals maxRetryAttempts (3)
+            when(paymentRepository.findById("pay-2")).thenReturn(Optional.of(payment));
+
+            IllegalStateException ex = assertThrows(IllegalStateException.class,
+                    () -> paymentService.retryPayment("pay-2"));
+            assertTrue(ex.getMessage().contains("maximum retry limit"));
+        }
+
+        @Test
+        @DisplayName("Should throw PaymentNotFoundException when payment does not exist")
+        void retryPayment_notFound_throws() {
+            when(paymentRepository.findById("missing")).thenReturn(Optional.empty());
+
+            assertThrows(PaymentNotFoundException.class,
+                    () -> paymentService.retryPayment("missing"));
+        }
+
+        @Test
+        @DisplayName("Should succeed when FAILED payment is within retry limit")
+        void retryPayment_withinLimit_succeeds() {
+            Payment payment = createPayment("pay-3", "FAILED");
+            payment.setRetryCount(1); // below maxRetryAttempts (3)
+            payment.setSourceAccount("1234567890");
+            payment.setDestinationAccount("0987654321");
+            payment.setAmount(BigDecimal.valueOf(100));
+            payment.setCurrency("USD");
+
+            Transaction tx = new Transaction();
+            tx.setId("tx-001");
+            tx.setPaymentId("pay-3");
+
+            when(paymentRepository.findById("pay-3")).thenReturn(Optional.of(payment));
+            when(paymentRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+            when(bankingAPIService.validateAccount(any())).thenReturn(true);
+            when(bankingAPIService.hasSufficientFunds(any(), any())).thenReturn(true);
+            when(transactionService.createTransaction("pay-3")).thenReturn(tx);
+            doNothing().when(bankingAPIService).transferFunds(any(), any(), any());
+
+            PaymentResponse response = paymentService.retryPayment("pay-3");
+
+            assertEquals("COMPLETED", response.getStatus());
         }
     }
 }
