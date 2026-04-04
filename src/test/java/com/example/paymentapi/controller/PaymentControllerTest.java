@@ -5,6 +5,7 @@ import com.example.paymentapi.dto.LoginRequest;
 import com.example.paymentapi.dto.LoginResponse;
 import com.example.paymentapi.dto.PaymentRequest;
 import com.example.paymentapi.dto.PaymentResponse;
+import com.example.paymentapi.exception.PaymentNotFoundException;
 import com.example.paymentapi.model.Transaction;
 import com.example.paymentapi.service.IdempotencyService;
 import com.example.paymentapi.service.PaymentService;
@@ -23,13 +24,11 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
-
-import java.time.LocalDateTime;
-import java.util.List;
 
 import static com.example.paymentapi.controller.PaymentController.IDEMPOTENCY_KEY_HEADER;
 import static org.mockito.ArgumentMatchers.any;
@@ -309,5 +308,32 @@ public class PaymentControllerTest {
     public void testGetTransactions_requiresAuthentication() throws Exception {
         mockMvc.perform(get("/api/v1/payments/pay-1/transactions"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    public void testGetTransactions_paymentNotFound_returns404() throws Exception {
+        when(paymentService.getPaymentById("nonexistent"))
+                .thenThrow(new PaymentNotFoundException("Payment not found with ID: nonexistent"));
+
+        mockMvc.perform(get("/api/v1/payments/nonexistent/transactions")
+                        .header("Authorization", token))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    public void testGetTransactions_emptyList_returns200() throws Exception {
+        PaymentResponse paymentResponse = new PaymentResponse();
+        paymentResponse.setId("pay-2");
+        paymentResponse.setStatus("PENDING");
+        paymentResponse.setCreatedAt(LocalDateTime.now());
+
+        when(paymentService.getPaymentById("pay-2")).thenReturn(paymentResponse);
+        when(transactionService.getTransactionsByPaymentId("pay-2")).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/v1/payments/pay-2/transactions")
+                        .header("Authorization", token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray())
+                .andExpect(jsonPath("$").isEmpty());
     }
 }

@@ -43,15 +43,30 @@ public class TransactionResponse {
     @Schema(description = "Timestamp when the transaction was last updated")
     private LocalDateTime updatedAt;
 
+    private static final int MAX_FAILURE_REASON_LENGTH = 200;
+
     /** Maps a Transaction entity to a TransactionResponse DTO. */
     public static TransactionResponse from(Transaction t) {
         return TransactionResponse.builder()
                 .id(t.getId())
                 .paymentId(t.getPaymentId())
                 .status(t.getStatus())
-                .failureReason(t.getFailureReason())
+                .failureReason(sanitizeFailureReason(t.getFailureReason()))
                 .createdAt(t.getCreatedAt())
                 .updatedAt(t.getUpdatedAt())
                 .build();
+    }
+
+    /**
+     * Truncates the failure reason to prevent leaking long internal error
+     * messages (e.g. stack traces, SQL fragments) from downstream services.
+     */
+    private static String sanitizeFailureReason(String raw) {
+        if (raw == null) {
+            return null;
+        }
+        return raw.length() <= MAX_FAILURE_REASON_LENGTH
+                ? raw
+                : raw.substring(0, MAX_FAILURE_REASON_LENGTH) + "...";
     }
 }

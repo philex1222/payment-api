@@ -489,6 +489,8 @@ public class PaymentServiceTest {
             );
             verify(auditService).logPaymentEvent(eq("payment123"), contains("REVERSED"));
             verify(notificationService).sendPaymentNotification(anyString(), contains("reversal"));
+            verify(paymentMetrics).incrementReversed();
+            verify(paymentMetrics, never()).incrementRefunded();
         }
 
         @Test
@@ -526,6 +528,8 @@ public class PaymentServiceTest {
                     payment.getSourceAccount(),
                     BigDecimal.valueOf(50)
             );
+            verify(paymentMetrics).incrementRefunded();
+            verify(paymentMetrics, never()).incrementReversed();
         }
 
         @Test
@@ -588,6 +592,34 @@ public class PaymentServiceTest {
 
             assertThrows(PaymentNotFoundException.class,
                     () -> paymentService.retryPayment("missing"));
+        }
+
+        @Test
+        @DisplayName("Should succeed at boundary retryCount = maxAttempts - 1")
+        void retryPayment_boundaryRetryCount_succeeds() {
+            Payment payment = createPayment("pay-boundary", "FAILED");
+            payment.setRetryCount(2); // maxRetryAttempts - 1 = boundary (2 < 3, so allowed)
+            payment.setSourceAccount("1234567890");
+            payment.setDestinationAccount("0987654321");
+            payment.setAmount(BigDecimal.valueOf(50));
+            payment.setCurrency("USD");
+
+            Transaction tx = new Transaction();
+            tx.setId("tx-boundary");
+            tx.setPaymentId("pay-boundary");
+
+            when(paymentRepository.findById("pay-boundary")).thenReturn(Optional.of(payment));
+            when(paymentRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+            when(bankingAPIService.validateAccount(any())).thenReturn(true);
+            when(bankingAPIService.hasSufficientFunds(any(), any())).thenReturn(true);
+            when(transactionService.createTransaction("pay-boundary")).thenReturn(tx);
+            doNothing().when(bankingAPIService).transferFunds(any(), any(), any());
+
+            PaymentResponse response = paymentService.retryPayment("pay-boundary");
+
+            assertEquals("COMPLETED", response.getStatus());
+            verify(paymentMetrics).incrementRetried();
+            verify(paymentMetrics).incrementRetriedSuccess();
         }
 
         @Test
