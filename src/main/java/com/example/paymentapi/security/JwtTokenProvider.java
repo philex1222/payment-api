@@ -18,7 +18,6 @@ import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.List;
-import java.util.stream.Collectors;
 
 /**
  * JWT Token Provider for generating and validating JWT tokens.
@@ -71,7 +70,7 @@ public class JwtTokenProvider {
                 .expiration(expiryDate)
                 .claim("roles", userDetails.getAuthorities().stream()
                         .map(GrantedAuthority::getAuthority)
-                        .collect(Collectors.toList()))
+                        .toList())
                 .signWith(secretKey)
                 .compact();
 

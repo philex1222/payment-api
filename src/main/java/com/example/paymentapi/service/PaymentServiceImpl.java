@@ -32,7 +32,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.stream.Collectors;
 
 @Service
 @Transactional
@@ -233,7 +232,7 @@ public class PaymentServiceImpl implements PaymentService {
         List<Payment> payments = isCurrentUserAdmin()
                 ? paymentRepository.findBySourceAccount(sourceAccount)
                 : paymentRepository.findBySourceAccountAndCreatedBy(sourceAccount, currentUsername());
-        return payments.stream().map(this::mapToResponse).collect(Collectors.toList());
+        return payments.stream().map(this::mapToResponse).toList();
     }
 
     @Override
@@ -243,7 +242,7 @@ public class PaymentServiceImpl implements PaymentService {
         List<Payment> payments = isCurrentUserAdmin()
                 ? paymentRepository.findByDestinationAccount(destinationAccount)
                 : paymentRepository.findByDestinationAccountAndCreatedBy(destinationAccount, currentUsername());
-        return payments.stream().map(this::mapToResponse).collect(Collectors.toList());
+        return payments.stream().map(this::mapToResponse).toList();
     }
 
     @Override

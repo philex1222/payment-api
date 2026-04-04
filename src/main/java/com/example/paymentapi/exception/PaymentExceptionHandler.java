@@ -25,7 +25,6 @@ import jakarta.validation.ConstraintViolationException;
 import org.slf4j.MDC;
 import java.util.List;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 @RestControllerAdvice
 public class PaymentExceptionHandler {
@@ -107,7 +106,7 @@ public class PaymentExceptionHandler {
                         .message(fe.getDefaultMessage())
                         .rejectedValue(fe.getRejectedValue())
                         .build())
-                .collect(Collectors.toList());
+                .toList();
 
         ErrorResponse error = createErrorResponse(
                 HttpStatus.BAD_REQUEST, "Validation Failed",
@@ -128,7 +127,7 @@ public class PaymentExceptionHandler {
                         .message(cv.getMessage())
                         .rejectedValue(cv.getInvalidValue())
                         .build())
-                .collect(Collectors.toList());
+                .toList();
 
         ErrorResponse error = createErrorResponse(
                 HttpStatus.BAD_REQUEST, "Constraint Violation",
