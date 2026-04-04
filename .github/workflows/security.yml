@@ -55,7 +55,7 @@ jobs:
           echo "value=$ARGS" >> "$GITHUB_OUTPUT"
 
       - name: Run OWASP Dependency-Check (all severities)
-        uses: dependency-check/Dependency-Check_Action@75ba02d6183445fe0761d26e836bde58b9560600 # 1.1.0
+        uses: dependency-check/Dependency-Check_Action@75ba02d6183445fe0761d26e836bde58b1560600 # 1.1.0
         with:
           project: payment-api
           path: .
