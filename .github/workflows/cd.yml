@@ -49,7 +49,9 @@ jobs:
 
     steps:
       - name: Checkout source code
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
 
       # Use the $GITHUB_SHA builtin env var — avoids injecting the expression
       # directly into a shell command (defence-in-depth against injection).
@@ -58,10 +60,10 @@ jobs:
         run: echo "tag=sha-$(echo "${GITHUB_SHA}" | cut -c1-7)" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
 
       - name: Log in to GitHub Container Registry (GHCR)
-        uses: docker/login-action@v4
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -69,7 +71,7 @@ jobs:
 
       - name: Extract Docker image metadata (tags & labels)
         id: meta
-        uses: docker/metadata-action@v6
+        uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6
         with:
           images: ghcr.io/${{ github.repository }}
           tags: |
@@ -83,7 +85,7 @@ jobs:
 
       - name: Build and push Docker image to GHCR
         id: build-push
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7
         with:
           context: .
           push: true
@@ -138,7 +140,9 @@ jobs:
 
     steps:
       - name: Checkout source code
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
 
       - name: Check cluster credentials
         id: check-cluster
@@ -149,7 +153,7 @@ jobs:
             echo "configured=false" >> "$GITHUB_OUTPUT"
             {
               echo "### Staging Deployment — Skipped"
-              echo "⚠️ \`KUBE_CONFIG\` secret not set in the **staging** environment."
+              echo "KUBE_CONFIG secret not set in the **staging** environment."
               echo "Add a base64-encoded kubeconfig to enable Kubernetes deployments."
             } >> "$GITHUB_STEP_SUMMARY"
           else
@@ -158,7 +162,7 @@ jobs:
 
       - name: Install Helm
         if: steps.check-cluster.outputs.configured == 'true'
-        uses: azure/setup-helm@v5
+        uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5
         with:
           version: "3.16.3"
 
@@ -230,6 +234,27 @@ jobs:
             --namespace payment-staging \
             --timeout=5m
 
+      - name: Smoke test — health endpoint
+        if: steps.check-cluster.outputs.configured == 'true'
+        env:
+          STAGING_URL: ${{ vars.STAGING_URL }}
+        run: |
+          HEALTH_URL="${STAGING_URL:-http://payment-api.payment-staging.svc.cluster.local:8080}/actuator/health"
+          echo "Checking health at: $HEALTH_URL"
+          for i in 1 2 3 4 5; do
+            STATUS=$(kubectl exec deploy/payment-api -n payment-staging -- \
+              wget -qO- --timeout=5 http://localhost:8080/actuator/health 2>/dev/null \
+              | grep -o '"status":"[A-Z]*"' | head -1 || echo "")
+            if echo "$STATUS" | grep -q '"UP"'; then
+              echo "Health check passed: $STATUS"
+              exit 0
+            fi
+            echo "Attempt $i: $STATUS — retrying in 10s..."
+            sleep 10
+          done
+          echo "Health check failed after 5 attempts"
+          exit 1
+
       - name: Write staging deployment summary
         if: steps.check-cluster.outputs.configured == 'true'
         env:
@@ -273,7 +298,9 @@ jobs:
 
     steps:
       - name: Checkout source code
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
 
       - name: Check cluster credentials
         id: check-cluster
@@ -284,7 +311,7 @@ jobs:
             echo "configured=false" >> "$GITHUB_OUTPUT"
             {
               echo "### Production Deployment — Skipped"
-              echo "⚠️ \`KUBE_CONFIG\` secret not set in the **production** environment."
+              echo "KUBE_CONFIG secret not set in the **production** environment."
               echo "Add a base64-encoded kubeconfig to enable Kubernetes deployments."
             } >> "$GITHUB_STEP_SUMMARY"
           else
@@ -293,7 +320,7 @@ jobs:
 
       - name: Install Helm
         if: steps.check-cluster.outputs.configured == 'true'
-        uses: azure/setup-helm@v5
+        uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5
         with:
           version: "3.16.3"
 

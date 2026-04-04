@@ -7,6 +7,15 @@ target/
 
 # Secrets — never bake these into the image
 .env
+*.env
+
+# CI/CD & GitHub config — not needed in the Docker build context
+.github/
+.claude/
+
+# Infrastructure config — not part of the application image
+helm/
+docker-compose*.yml
 
 # Documentation
 *.md
@@ -23,3 +32,4 @@ logs/
 
 # Docker files themselves (not needed in build context)
 .dockerignore
+Dockerfile
