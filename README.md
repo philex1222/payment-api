@@ -369,13 +369,14 @@ mvn test -Dtest=PaymentServiceTest
 open target/site/jacoco/index.html
 ```
 
-**371 tests** across 21 test classes:
+**418 tests** across 22 test classes:
 - **Unit tests** -- service layer, DTOs, validators, security filter, metrics
 - **Controller tests** -- `@WebMvcTest` slices with MockMvc (auth, payments, admin)
 - **Integration tests** -- full Spring context with H2 (`@SpringBootTest`)
 - **End-to-end tests** -- HTTP round-trips via `TestRestTemplate`
+- **System tests** -- 47 cross-cutting E2E journeys (auth lifecycle, ownership isolation, concurrent safety, security headers, error consistency, amount boundaries, payment lifecycle)
 
-Coverage gate: **75% line coverage** enforced by JaCoCo on `mvn verify`. Current coverage: ~82%.
+Coverage gate: **75% line coverage** enforced by JaCoCo on `mvn verify`. Current coverage: ~83%.
 
 ---
 
@@ -576,7 +577,7 @@ payment-api/
     application-test.properties      # Test-specific overrides
     db/migration/                    # Flyway SQL migrations (V1-V8)
     logback-spring.xml               # Structured logging config
-  src/test/                          # 371 tests (unit, controller, integration, E2E)
+  src/test/                          # 418 tests (unit, controller, integration, E2E, system)
   .github/workflows/                 # CI, CD, security scan, Claude Code workflows
   helm/payment-api/                  # Helm chart for Kubernetes deployment
   Dockerfile                         # Multi-stage layered JAR build

@@ -49,7 +49,8 @@ class AdminServiceImplTest {
                     new Object[]{"COMPLETED", 10L},
                     new Object[]{"FAILED", 2L}
             ));
-            when(paymentRepository.getTodayStats(any())).thenReturn(new Object[]{3L, new BigDecimal("500.00")});
+            when(paymentRepository.getTodayStats(any())).thenReturn(
+                    List.<Object[]>of(new Object[]{3L, new BigDecimal("500.00")}));
             when(userRepository.count()).thenReturn(5L);
 
             AdminStatsResponse stats = adminService.getStats();
@@ -67,7 +68,8 @@ class AdminServiceImplTest {
         @DisplayName("Handles empty payments table")
         void handlesNoPayments() {
             when(paymentRepository.countGroupedByStatus()).thenReturn(List.of());
-            when(paymentRepository.getTodayStats(any())).thenReturn(new Object[]{0L, BigDecimal.ZERO});
+            when(paymentRepository.getTodayStats(any())).thenReturn(
+                    List.<Object[]>of(new Object[]{0L, BigDecimal.ZERO}));
             when(userRepository.count()).thenReturn(1L);
 
             AdminStatsResponse stats = adminService.getStats();

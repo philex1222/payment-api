@@ -51,9 +51,13 @@ public class AdminServiceImpl implements AdminService {
 
         // Today's payment count and volume (midnight → now)
         LocalDateTime startOfToday = LocalDate.now().atTime(LocalTime.MIDNIGHT);
-        Object[] todayStats = paymentRepository.getTodayStats(startOfToday);
+        List<Object[]> todayStatsRows = paymentRepository.getTodayStats(startOfToday);
+        Object[] todayStats = todayStatsRows.isEmpty()
+                ? new Object[]{0L, BigDecimal.ZERO}
+                : todayStatsRows.get(0);
         long todayCount = todayStats[0] instanceof Long l ? l : ((Number) todayStats[0]).longValue();
-        BigDecimal todayVolume = (BigDecimal) todayStats[1];
+        BigDecimal todayVolume = todayStats[1] instanceof BigDecimal bd ? bd
+                : new BigDecimal(todayStats[1].toString());
 
         long totalUsers = userRepository.count();
 

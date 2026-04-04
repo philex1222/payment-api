@@ -24,9 +24,9 @@ public interface PaymentRepository extends JpaRepository<Payment, String>, JpaSp
     @Query("SELECT p.status, COUNT(p) FROM Payment p GROUP BY p.status")
     List<Object[]> countGroupedByStatus();
 
-    /** Returns [count, sum(amount)] for payments created on or after startOfDay. */
+    /** Returns a single-row list of [count, sum(amount)] for payments created on or after startOfDay. */
     @Query("SELECT COUNT(p), COALESCE(SUM(p.amount), 0) FROM Payment p WHERE p.createdAt >= :startOfDay")
-    Object[] getTodayStats(@Param("startOfDay") LocalDateTime startOfDay);
+    List<Object[]> getTodayStats(@Param("startOfDay") LocalDateTime startOfDay);
 
     /** Bulk-deletes terminal payments whose last update is older than the cutoff. */
     @Modifying
