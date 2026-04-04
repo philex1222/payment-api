@@ -1,0 +1,16 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AdminStatsResponse",
+  "description": "Platform statistics returned by GET /api/v1/admin/stats",
+  "type": "object",
+  "required": ["totalPayments", "paymentsByStatus", "todayPaymentCount", "todayVolume", "totalUsers", "generatedAt"],
+  "properties": {
+    "totalPayments":    { "type": "integer", "minimum": 0 },
+    "paymentsByStatus": { "type": "object", "additionalProperties": { "type": "integer" } },
+    "todayPaymentCount":{ "type": "integer", "minimum": 0 },
+    "todayVolume":      { "type": "number",  "minimum": 0 },
+    "totalUsers":       { "type": "integer", "minimum": 1 },
+    "generatedAt":      { "type": "string" }
+  },
+  "additionalProperties": false
+}

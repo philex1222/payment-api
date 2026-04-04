@@ -1,0 +1,11 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "LoginResponse",
+  "description": "JWT token returned by POST /api/v1/auth/login",
+  "type": "object",
+  "required": ["token"],
+  "properties": {
+    "token": { "type": "string", "minLength": 10 }
+  },
+  "additionalProperties": false
+}

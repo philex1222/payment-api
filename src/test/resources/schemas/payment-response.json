@@ -1,0 +1,22 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PaymentResponse",
+  "description": "Response returned by POST /api/v1/payments and GET /api/v1/payments/{id}",
+  "type": "object",
+  "required": ["id", "sourceAccount", "destinationAccount", "amount", "currency", "status", "createdAt"],
+  "properties": {
+    "id":                 { "type": "string", "minLength": 1 },
+    "sourceAccount":      { "type": "string", "pattern": "^\\*{6}\\d{4}$" },
+    "destinationAccount": { "type": "string", "pattern": "^\\*{6}\\d{4}$" },
+    "amount":             { "type": "number", "minimum": 0.01, "maximum": 1000000 },
+    "currency":           { "type": "string", "pattern": "^[A-Z]{3}$" },
+    "status":             { "type": "string", "enum": ["PENDING","PROCESSING","COMPLETED","FAILED","CANCELLED","REVERSED","REFUNDED"] },
+    "createdAt":          { "type": "string" },
+    "updatedAt":          { "type": "string" },
+    "description":        { "type": "string" },
+    "transactionId":      { "type": "string" },
+    "message":            { "type": "string" },
+    "statusDescription":  { "type": "string" }
+  },
+  "additionalProperties": false
+}

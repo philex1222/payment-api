@@ -205,6 +205,17 @@
             <artifactId>httpclient5</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- REST Assured — BDD-style HTTP API testing with JSON Schema validation -->
+        <dependency>
+            <groupId>io.rest-assured</groupId>
+            <artifactId>rest-assured</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.rest-assured</groupId>
+            <artifactId>json-schema-validator</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>

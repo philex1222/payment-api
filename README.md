@@ -369,12 +369,22 @@ mvn test -Dtest=PaymentServiceTest
 open target/site/jacoco/index.html
 ```
 
-**418 tests** across 22 test classes:
+**459 tests** across 23 test classes:
 - **Unit tests** -- service layer, DTOs, validators, security filter, metrics
 - **Controller tests** -- `@WebMvcTest` slices with MockMvc (auth, payments, admin)
 - **Integration tests** -- full Spring context with H2 (`@SpringBootTest`)
 - **End-to-end tests** -- HTTP round-trips via `TestRestTemplate`
 - **System tests** -- 47 cross-cutting E2E journeys (auth lifecycle, ownership isolation, concurrent safety, security headers, error consistency, amount boundaries, payment lifecycle)
+- **REST Assured tests** -- 41 BDD-style API tests with JSON Schema validation (`Given`/`When`/`Then`), response-time SLA assertions, and real HTTP round-trips against the embedded server
+
+### REST Assured (system testing framework)
+
+The project uses [REST Assured](https://rest-assured.io/) 5.5.x for BDD-style API testing:
+
+- **JSON Schema validation** — responses validated against schemas in `src/test/resources/schemas/` (payment, error, login, admin-stats)
+- **Response time SLA** — payment creation < 3s, list < 2s, health < 1s
+- **Security verification** — headers (CSP, X-Frame-Options, HSTS), RBAC, BOLA ownership, account masking
+- **Full HTTP stack** — tests hit the real embedded Tomcat (not MockMvc), exercising the complete filter chain
 
 Coverage gate: **75% line coverage** enforced by JaCoCo on `mvn verify`. Current coverage: ~83%.
 
@@ -577,7 +587,7 @@ payment-api/
     application-test.properties      # Test-specific overrides
     db/migration/                    # Flyway SQL migrations (V1-V8)
     logback-spring.xml               # Structured logging config
-  src/test/                          # 418 tests (unit, controller, integration, E2E, system)
+  src/test/                          # 459 tests (unit, controller, integration, E2E, system, REST Assured)
   .github/workflows/                 # CI, CD, security scan, Claude Code workflows
   helm/payment-api/                  # Helm chart for Kubernetes deployment
   Dockerfile                         # Multi-stage layered JAR build

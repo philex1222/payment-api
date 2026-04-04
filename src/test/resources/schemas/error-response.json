@@ -1,0 +1,29 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ErrorResponse",
+  "description": "Standardized error body returned by the API for 4xx/5xx responses",
+  "type": "object",
+  "required": ["timestamp", "status", "error", "message", "path"],
+  "properties": {
+    "timestamp":   { "type": "string" },
+    "status":      { "type": "integer" },
+    "error":       { "type": "string", "minLength": 1 },
+    "message":     { "type": "string" },
+    "path":        { "type": "string", "pattern": "^/" },
+    "traceId":     { "type": "string" },
+    "fieldErrors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["field", "message"],
+        "properties": {
+          "field":         { "type": "string" },
+          "message":       { "type": "string" },
+          "rejectedValue": {}
+        }
+      }
+    },
+    "details": { "type": "object" }
+  },
+  "additionalProperties": false
+}
