@@ -13,7 +13,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -54,26 +54,26 @@ class AuthControllerTest {
     @Autowired
     private ObjectMapper objectMapper;
 
-    @MockBean
+    @MockitoBean
     private AuthenticationManager authenticationManager;
 
-    @MockBean
+    @MockitoBean
     private JwtTokenProvider jwtTokenProvider;
 
-    @MockBean
+    @MockitoBean
     private UserDetailsService userDetailsService;
 
-    @MockBean
+    @MockitoBean
     private TokenBlacklistService tokenBlacklistService;
 
-    @MockBean
+    @MockitoBean
     private UserService userService;
 
     // Mock out the interceptors so @WebMvcTest does not need RateLimitProperties on classpath
-    @MockBean
+    @MockitoBean
     private RateLimitInterceptor rateLimitInterceptor;
 
-    @MockBean
+    @MockitoBean
     private LoginRateLimitInterceptor loginRateLimitInterceptor;
 
     @org.junit.jupiter.api.BeforeEach

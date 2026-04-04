@@ -200,7 +200,7 @@ public class PaymentServiceImpl implements PaymentService {
         logger.debug("Retrieving payments: status={}, dateFrom={}, dateTo={}, amountFrom={}, amountTo={}, currency={}, page={}, size={}",
                 status, dateFrom, dateTo, amountFrom, amountTo, currency,
                 pageable.getPageNumber(), pageable.getPageSize());
-        Specification<Payment> spec = Specification.where(null);
+        Specification<Payment> spec = (root, query, cb) -> cb.conjunction();
         if (status != null && !status.isBlank()) {
             spec = spec.and(PaymentSpecification.hasStatus(status));
         }
