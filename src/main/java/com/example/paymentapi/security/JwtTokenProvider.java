@@ -48,7 +48,10 @@ public class JwtTokenProvider {
         // Keys.hmacShaKeyFor requires at least 512 bits (64 bytes) for HS512.
         byte[] keyBytes = jwtSecretString.getBytes(StandardCharsets.UTF_8);
         this.secretKey = Keys.hmacShaKeyFor(keyBytes);
-        if (jwtSecretString.startsWith("change-me")) {
+        if (keyBytes.length < 64) {
+            logger.warn("SECURITY: JWT secret is only {} bytes — HS512 requires at least 64 bytes (512 bits). "
+                    + "Set JWT_SECRET to a cryptographically random 64+ byte value in production.", keyBytes.length);
+        } else if (jwtSecretString.startsWith("change-me")) {
             logger.warn("SECURITY: JWT secret is using the insecure development default. "
                     + "Set the JWT_SECRET environment variable before deploying to production.");
         }
@@ -66,6 +69,7 @@ public class JwtTokenProvider {
         String token = Jwts.builder()
                 .subject(userDetails.getUsername())
                 .issuer("payment-api")
+                .audience().add("payment-api").and()
                 .issuedAt(now)
                 .expiration(expiryDate)
                 .claim("roles", userDetails.getAuthorities().stream()
@@ -94,6 +98,7 @@ public class JwtTokenProvider {
     public String getUsernameFromToken(String token) {
         return Jwts.parser()
                 .verifyWith(secretKey)
+                .requireAudience("payment-api")
                 .build()
                 .parseSignedClaims(token)
                 .getPayload()
@@ -108,7 +113,10 @@ public class JwtTokenProvider {
      */
     public boolean validateToken(String token) {
         try {
-            Jwts.parser().verifyWith(secretKey).requireIssuer("payment-api").build().parseSignedClaims(token);
+            Jwts.parser().verifyWith(secretKey)
+                    .requireIssuer("payment-api")
+                    .requireAudience("payment-api")
+                    .build().parseSignedClaims(token);
             return true;
         } catch (SignatureException ex) {
             logger.warn("Invalid JWT signature: {}", ex.getMessage());
@@ -130,6 +138,7 @@ public class JwtTokenProvider {
     public Date getExpirationFromToken(String token) {
         return Jwts.parser()
                 .verifyWith(secretKey)
+                .requireAudience("payment-api")
                 .build()
                 .parseSignedClaims(token)
                 .getPayload()

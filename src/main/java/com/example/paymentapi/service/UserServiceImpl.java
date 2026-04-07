@@ -1,5 +1,7 @@
 package com.example.paymentapi.service;
 
+import com.example.paymentapi.dto.RegistrationRequest;
+import com.example.paymentapi.exception.UsernameAlreadyExistsException;
 import com.example.paymentapi.model.User;
 import com.example.paymentapi.repository.UserRepository;
 import org.slf4j.Logger;
@@ -29,6 +31,22 @@ public class UserServiceImpl implements UserService {
     @Override
     public Optional<User> findByUsername(String username) {
         return userRepository.findByUsername(username);
+    }
+
+    @Override
+    @Transactional
+    public User register(RegistrationRequest request) {
+        if (userRepository.existsByUsername(request.getUsername())) {
+            throw new UsernameAlreadyExistsException(
+                    "Username '" + request.getUsername() + "' is already taken");
+        }
+        User user = new User();
+        user.setUsername(request.getUsername());
+        user.setPassword(passwordEncoder.encode(request.getPassword()));
+        user.setRole("ROLE_USER");
+        User saved = userRepository.save(user);
+        logger.info("New user registered: '{}'", saved.getUsername());
+        return saved;
     }
 
     @Override

@@ -1,5 +1,7 @@
 package com.example.paymentapi.service;
 
+import com.example.paymentapi.dto.RegistrationRequest;
+import com.example.paymentapi.exception.UsernameAlreadyExistsException;
 import com.example.paymentapi.model.User;
 import com.example.paymentapi.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -118,5 +120,39 @@ class UserServiceImplTest {
 
         assertThrows(UsernameNotFoundException.class,
                 () -> userService.changePassword("ghost", "any", "newPass123"));
+    }
+
+    // ── register ───────────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("register saves user with ROLE_USER and encoded password")
+    void register_newUsername_savesUserWithRoleUser() {
+        RegistrationRequest request = new RegistrationRequest("newuser", "SecurePass123");
+        when(userRepository.existsByUsername("newuser")).thenReturn(false);
+        when(userRepository.save(any(User.class))).thenAnswer(i -> {
+            User saved = i.getArgument(0);
+            saved.setId(1L);
+            return saved;
+        });
+
+        User result = userService.register(request);
+
+        assertEquals("newuser", result.getUsername());
+        assertEquals("ROLE_USER", result.getRole());
+        assertTrue(passwordEncoder.matches("SecurePass123", result.getPassword()),
+                "Saved password hash should match the raw password");
+        verify(userRepository).existsByUsername("newuser");
+        verify(userRepository).save(any(User.class));
+    }
+
+    @Test
+    @DisplayName("register throws UsernameAlreadyExistsException for duplicate username")
+    void register_duplicateUsername_throwsUsernameAlreadyExistsException() {
+        RegistrationRequest request = new RegistrationRequest("existing", "SecurePass123");
+        when(userRepository.existsByUsername("existing")).thenReturn(true);
+
+        assertThrows(UsernameAlreadyExistsException.class, () -> userService.register(request));
+
+        verify(userRepository, never()).save(any());
     }
 }

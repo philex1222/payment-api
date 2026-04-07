@@ -73,6 +73,8 @@ public class SecurityConfig {
                     .policy(ReferrerPolicyHeaderWriter.ReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN))
                 .contentSecurityPolicy(csp ->
                     csp.policyDirectives("default-src 'self'; frame-ancestors 'none'"))
+                .permissionsPolicy(pp ->
+                    pp.policy("geolocation=(), camera=(), microphone=(), payment=(), usb=()"))
             )
 
             // Authorization rules — ADMIN inherits USER access to payment endpoints

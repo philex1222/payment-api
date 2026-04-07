@@ -4,8 +4,10 @@ import com.example.paymentapi.dto.ChangePasswordRequest;
 import com.example.paymentapi.dto.ErrorResponse;
 import com.example.paymentapi.dto.LoginRequest;
 import com.example.paymentapi.dto.LoginResponse;
+import com.example.paymentapi.dto.RegistrationRequest;
 import com.example.paymentapi.dto.UserProfileResponse;
 import com.example.paymentapi.exception.UserNotFoundException;
+import com.example.paymentapi.model.User;
 import com.example.paymentapi.security.JwtTokenProvider;
 import com.example.paymentapi.service.TokenBlacklistService;
 import com.example.paymentapi.service.UserService;
@@ -52,6 +54,20 @@ public class AuthController {
         this.jwtTokenProvider = jwtTokenProvider;
         this.tokenBlacklistService = tokenBlacklistService;
         this.userService = userService;
+    }
+
+    @PostMapping("/register")
+    @Operation(summary = "Register a new user account",
+               description = "Creates a new account with ROLE_USER. Returns 409 if the username is already taken.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "201", description = "User registered successfully"),
+        @ApiResponse(responseCode = "400", description = "Validation error in request body"),
+        @ApiResponse(responseCode = "409", description = "Username is already taken")
+    })
+    public ResponseEntity<UserProfileResponse> register(@Valid @RequestBody RegistrationRequest request) {
+        User user = userService.register(request);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(new UserProfileResponse(user.getId(), user.getUsername(), user.getRole()));
     }
 
     @PostMapping("/login")

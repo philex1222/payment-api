@@ -5,6 +5,9 @@ import com.example.paymentapi.config.RateLimitInterceptor;
 import com.example.paymentapi.config.SecurityConfig;
 import com.example.paymentapi.dto.ChangePasswordRequest;
 import com.example.paymentapi.dto.LoginRequest;
+import com.example.paymentapi.dto.RegistrationRequest;
+import com.example.paymentapi.exception.UsernameAlreadyExistsException;
+import com.example.paymentapi.model.User;
 import com.example.paymentapi.security.JwtTokenProvider;
 import com.example.paymentapi.service.TokenBlacklistService;
 import com.example.paymentapi.service.UserService;
@@ -21,7 +24,6 @@ import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.test.context.support.WithMockUser;
@@ -256,5 +258,90 @@ class AuthControllerTest {
 
         mockMvc.perform(get("/api/v1/auth/me"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    // ── POST /register ────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("Register with valid request creates user and returns 201")
+    void register_validRequest_returns201() throws Exception {
+        when(rateLimitInterceptor.preHandle(any(), any(), any())).thenReturn(true);
+        User created = new User();
+        created.setId(10L);
+        created.setUsername("newuser");
+        created.setRole("ROLE_USER");
+        when(userService.register(any(RegistrationRequest.class))).thenReturn(created);
+
+        mockMvc.perform(post("/api/v1/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new RegistrationRequest("newuser", "SecurePass123"))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.username").value("newuser"))
+                .andExpect(jsonPath("$.role").value("ROLE_USER"))
+                .andExpect(jsonPath("$.id").value(10));
+    }
+
+    @Test
+    @DisplayName("Register with duplicate username returns 409")
+    void register_duplicateUsername_returns409() throws Exception {
+        when(rateLimitInterceptor.preHandle(any(), any(), any())).thenReturn(true);
+        when(userService.register(any(RegistrationRequest.class)))
+                .thenThrow(new UsernameAlreadyExistsException("Username 'newuser' is already taken"));
+
+        mockMvc.perform(post("/api/v1/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new RegistrationRequest("newuser", "SecurePass123"))))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.status").value(409))
+                .andExpect(jsonPath("$.error").value("Username Already Taken"));
+    }
+
+    @Test
+    @DisplayName("Register with too-short username returns 400")
+    void register_shortUsername_returns400() throws Exception {
+        when(rateLimitInterceptor.preHandle(any(), any(), any())).thenReturn(true);
+
+        mockMvc.perform(post("/api/v1/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new RegistrationRequest("ab", "SecurePass123"))))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("Register with too-short password returns 400")
+    void register_shortPassword_returns400() throws Exception {
+        when(rateLimitInterceptor.preHandle(any(), any(), any())).thenReturn(true);
+
+        mockMvc.perform(post("/api/v1/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new RegistrationRequest("validuser", "short"))))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("Register with invalid username characters returns 400")
+    void register_invalidUsernameChars_returns400() throws Exception {
+        when(rateLimitInterceptor.preHandle(any(), any(), any())).thenReturn(true);
+
+        mockMvc.perform(post("/api/v1/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new RegistrationRequest("invalid user!", "SecurePass123"))))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("Register with missing fields returns 400")
+    void register_missingFields_returns400() throws Exception {
+        when(rateLimitInterceptor.preHandle(any(), any(), any())).thenReturn(true);
+
+        mockMvc.perform(post("/api/v1/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest());
     }
 }

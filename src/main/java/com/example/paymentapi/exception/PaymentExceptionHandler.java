@@ -206,6 +206,15 @@ public class PaymentExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
     }
 
+    @ExceptionHandler(UsernameAlreadyExistsException.class)
+    public ResponseEntity<ErrorResponse> handleUsernameAlreadyExistsException(
+            UsernameAlreadyExistsException ex, WebRequest request) {
+        logger.warn("Username conflict: {}", ex.getMessage());
+        ErrorResponse error = createErrorResponse(
+                HttpStatus.CONFLICT, "Username Already Taken", ex.getMessage(), request);
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(error);
+    }
+
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ErrorResponse> handleIllegalArgumentException(
             IllegalArgumentException ex, WebRequest request) {
