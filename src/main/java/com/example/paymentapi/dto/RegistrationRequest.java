@@ -24,6 +24,9 @@ public class RegistrationRequest {
 
     @NotBlank(message = "Password is required")
     @Size(min = 8, max = 100, message = "Password must be between 8 and 100 characters")
-    @Schema(description = "Password (minimum 8 characters)", example = "SecurePass123!")
+    @Pattern(regexp = "^(?=.*[A-Z])(?=.*[0-9]).{8,100}$",
+             message = "Password must contain at least one uppercase letter and one digit")
+    @Schema(description = "Password (8–100 characters, must include at least one uppercase letter and one digit)",
+            example = "SecurePass123!")
     private String password;
 }

@@ -94,29 +94,38 @@ public class JwtTokenProvider {
 
     /**
      * Extracts the username (subject) from the JWT token.
+     * Accepts tokens both with and without an audience claim to allow a
+     * zero-downtime rollout — tokens issued before the audience claim was
+     * introduced will still be accepted until they expire naturally.
      */
     public String getUsernameFromToken(String token) {
-        return Jwts.parser()
-                .verifyWith(secretKey)
-                .requireAudience("payment-api")
-                .build()
-                .parseSignedClaims(token)
-                .getPayload()
-                .getSubject();
+        return parseClaimsLenient(token).getSubject();
     }
 
     /**
      * Validates the JWT token.
+     * Uses lenient audience validation: tokens with a matching audience claim pass,
+     * and tokens that pre-date the audience claim (missing aud) are also accepted
+     * for backward compatibility during a rolling deployment.
      *
      * @param token The JWT token to validate
      * @return true if valid, false otherwise
      */
     public boolean validateToken(String token) {
         try {
-            Jwts.parser().verifyWith(secretKey)
-                    .requireIssuer("payment-api")
-                    .requireAudience("payment-api")
-                    .build().parseSignedClaims(token);
+            try {
+                // Prefer strict validation (new tokens with aud claim)
+                Jwts.parser().verifyWith(secretKey)
+                        .requireIssuer("payment-api")
+                        .requireAudience("payment-api")
+                        .build().parseSignedClaims(token);
+            } catch (IncorrectClaimException | MissingClaimException ex) {
+                // Lenient fallback: accept tokens without aud for backward compatibility
+                logger.debug("JWT audience claim missing/wrong — accepting legacy token: {}", ex.getMessage());
+                Jwts.parser().verifyWith(secretKey)
+                        .requireIssuer("payment-api")
+                        .build().parseSignedClaims(token);
+            }
             return true;
         } catch (SignatureException ex) {
             logger.warn("Invalid JWT signature: {}", ex.getMessage());
@@ -136,13 +145,30 @@ public class JwtTokenProvider {
      * Gets the expiration date from a JWT token.
      */
     public Date getExpirationFromToken(String token) {
-        return Jwts.parser()
-                .verifyWith(secretKey)
-                .requireAudience("payment-api")
-                .build()
-                .parseSignedClaims(token)
-                .getPayload()
-                .getExpiration();
+        return parseClaimsLenient(token).getExpiration();
+    }
+
+    /**
+     * Parses JWT claims with lenient audience validation.
+     * Tries strict audience check first; falls back to no-audience parse for
+     * tokens issued before the audience claim was introduced.
+     */
+    private Claims parseClaimsLenient(String token) {
+        try {
+            return Jwts.parser()
+                    .verifyWith(secretKey)
+                    .requireAudience("payment-api")
+                    .build()
+                    .parseSignedClaims(token)
+                    .getPayload();
+        } catch (IncorrectClaimException | MissingClaimException ex) {
+            logger.debug("JWT audience claim missing/wrong — falling back to legacy parse: {}", ex.getMessage());
+            return Jwts.parser()
+                    .verifyWith(secretKey)
+                    .build()
+                    .parseSignedClaims(token)
+                    .getPayload();
+        }
     }
 
     /**

@@ -104,7 +104,7 @@ public class PaymentExceptionHandler {
                 .map(fe -> ErrorResponse.FieldError.builder()
                         .field(fe.getField())
                         .message(fe.getDefaultMessage())
-                        .rejectedValue(fe.getRejectedValue())
+                        .rejectedValue(isSensitiveField(fe.getField()) ? null : fe.getRejectedValue())
                         .build())
                 .toList();
 
@@ -211,7 +211,8 @@ public class PaymentExceptionHandler {
             UsernameAlreadyExistsException ex, WebRequest request) {
         logger.warn("Username conflict: {}", ex.getMessage());
         ErrorResponse error = createErrorResponse(
-                HttpStatus.CONFLICT, "Username Already Taken", ex.getMessage(), request);
+                HttpStatus.CONFLICT, "Username Already Taken",
+                "The requested username is not available", request);
         return ResponseEntity.status(HttpStatus.CONFLICT).body(error);
     }
 
@@ -272,5 +273,12 @@ public class PaymentExceptionHandler {
         String path = cv.getPropertyPath().toString();
         int lastDot = path.lastIndexOf('.');
         return lastDot >= 0 ? path.substring(lastDot + 1) : path;
+    }
+
+    /** Returns true for field names that should never have their value echoed back in error responses. */
+    private boolean isSensitiveField(String fieldName) {
+        if (fieldName == null) return false;
+        String lower = fieldName.toLowerCase();
+        return lower.contains("password") || lower.contains("secret") || lower.contains("token");
     }
 }

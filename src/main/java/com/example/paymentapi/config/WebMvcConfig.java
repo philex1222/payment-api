@@ -39,8 +39,8 @@ public class WebMvcConfig implements WebMvcConfigurer {
                 );
 
         // Stricter login limiter — 10 attempts/60s per client, brute-force protection.
-        // Applied in addition to the general limiter above; whichever fires first wins.
+        // Applied to /login and /register to prevent username enumeration and bulk account creation.
         registry.addInterceptor(loginRateLimitInterceptor)
-                .addPathPatterns("/api/v1/auth/login");
+                .addPathPatterns("/api/v1/auth/login", "/api/v1/auth/register");
     }
 }

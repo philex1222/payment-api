@@ -67,7 +67,7 @@ public class AuthController {
     public ResponseEntity<UserProfileResponse> register(@Valid @RequestBody RegistrationRequest request) {
         User user = userService.register(request);
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(new UserProfileResponse(user.getId(), user.getUsername(), user.getRole()));
+                .body(new UserProfileResponse(user.getId(), user.getUsername(), user.getRole(), user.getCreatedAt()));
     }
 
     @PostMapping("/login")
@@ -175,6 +175,6 @@ public class AuthController {
             @AuthenticationPrincipal UserDetails userDetails) {
         com.example.paymentapi.model.User user = userService.findByUsername(userDetails.getUsername())
                 .orElseThrow(() -> new UserNotFoundException("User not found: " + userDetails.getUsername()));
-        return ResponseEntity.ok(new UserProfileResponse(user.getId(), user.getUsername(), user.getRole()));
+        return ResponseEntity.ok(new UserProfileResponse(user.getId(), user.getUsername(), user.getRole(), user.getCreatedAt()));
     }
 }
