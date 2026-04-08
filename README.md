@@ -30,8 +30,9 @@ A production-grade RESTful microservice for payment processing built with Spring
 - **Reversal & refund** — full reversal or partial refund of COMPLETED payments
 - **Idempotency** — `Idempotency-Key` header prevents duplicate charges on network retries (Redis-backed, 24h TTL)
 - **BOLA protection** — users can only read/modify their own payments; ROLE_ADMIN bypasses all ownership checks
-- **JWT authentication** — HS512, configurable expiry, issuer-validated; logout invalidates tokens via blacklist
-- **Rate limiting** — per-client buckets (100 req/60s general, 10 req/60s login) on all `/api/v1/**` routes
+- **JWT authentication** — HS512, audience-validated (`aud=payment-api`), configurable expiry; logout blacklists tokens
+- **User registration** — `POST /api/v1/auth/register`; validates username pattern and password complexity (min 8, uppercase + digit); returns `createdAt`
+- **Rate limiting** — per-client buckets (100 req/60s general, 10 req/60s on `/login` and `/register`) on all `/api/v1/**` routes
 - **Circuit breaker** — Resilience4j on the downstream banking API with retry + time limiter
 - **Scheduled jobs** — automatic retry of FAILED payments; nightly cleanup of stale records and old audit logs
 - **Audit trail** — every payment event logged with actor identity (user or "system" for scheduled jobs)
@@ -51,13 +52,14 @@ A production-grade RESTful microservice for payment processing built with Spring
 | Runtime | Java 17, Spring Boot 3.5.13 |
 | Security | Spring Security 6, jjwt 0.13.0 (HS512), BCrypt |
 | Persistence | Spring Data JPA, Hibernate, MySQL 8.4 (prod), H2 (local/test) |
-| Migrations | Flyway 10 (V1-V8) |
+| Migrations | Flyway 10 (V1–V9) |
 | Cache / Idempotency | Redis 7.4 (docker), Simple in-memory (local) |
 | Resilience | Resilience4j 2.4.0 — circuit breaker, retry, rate limiter, time limiter |
 | Metrics | Micrometer + Prometheus + Grafana |
 | Tracing | Micrometer Tracing + Brave + Zipkin |
 | Logging | Logback + Logstash encoder 8.1 |
 | Docs | SpringDoc OpenAPI 2.8.9 |
+| Testing | REST Assured 5.5.x, Cucumber-JVM 7.18, JUnit 5, Mockito |
 | Build | Maven, JaCoCo 0.8.14 |
 | Container | Docker (multi-stage, layered JAR), docker-compose |
 | CI/CD | GitHub Actions (5-job CI + 3-job CD) |
@@ -365,26 +367,65 @@ mvn test
 # Run a single test class
 mvn test -Dtest=PaymentServiceTest
 
+# Run only Cucumber BDD scenarios
+mvn test -Dtest=CucumberIT
+
 # View coverage report
 open target/site/jacoco/index.html
+
+# View Cucumber HTML report (after mvn verify)
+open target/cucumber-reports/cucumber.html
 ```
 
-**459 tests** across 23 test classes:
-- **Unit tests** -- service layer, DTOs, validators, security filter, metrics
-- **Controller tests** -- `@WebMvcTest` slices with MockMvc (auth, payments, admin)
-- **Integration tests** -- full Spring context with H2 (`@SpringBootTest`)
-- **End-to-end tests** -- HTTP round-trips via `TestRestTemplate`
-- **System tests** -- 47 cross-cutting E2E journeys (auth lifecycle, ownership isolation, concurrent safety, security headers, error consistency, amount boundaries, payment lifecycle)
-- **REST Assured tests** -- 41 BDD-style API tests with JSON Schema validation (`Given`/`When`/`Then`), response-time SLA assertions, and real HTTP round-trips against the embedded server
+**478 tests** across 25 test classes:
 
-### REST Assured (system testing framework)
+| Layer | Count | Framework | What it covers |
+|---|---|---|---|
+| Unit | ~320 | JUnit 5 + Mockito | Services, DTOs, filters, security, metrics, scheduler |
+| Controller slice | ~60 | `@WebMvcTest` + MockMvc | Auth, payment, admin controllers; validation, error mapping |
+| Integration | ~15 | `@SpringBootTest` + H2 | Full Spring context; DB constraints, caching, tracing |
+| End-to-end | ~15 | `TestRestTemplate` | HTTP round-trips, ownership isolation |
+| System (RestAssured) | ~57 | REST Assured 5.5.x | JSON Schema validation, SLA, RBAC, masking, idempotency |
+| BDD acceptance | 25 | **Cucumber-JVM 7.18** | Business narrative scenarios in Gherkin |
 
-The project uses [REST Assured](https://rest-assured.io/) 5.5.x for BDD-style API testing:
+### REST Assured system tests
 
-- **JSON Schema validation** — responses validated against schemas in `src/test/resources/schemas/` (payment, error, login, admin-stats)
+The project uses [REST Assured](https://rest-assured.io/) 5.5.x for API-level system testing:
+
+- **JSON Schema validation** — responses validated against schemas in `src/test/resources/schemas/`
+  - `payment-response.json`, `error-response.json`, `login-response.json`, `admin-stats.json`, `user-profile-response.json`
+- **Coverage** — auth login/logout/me/register/change-password, full payment CRUD lifecycle, reversal, cancellation, idempotency, filtering, pagination, admin operations, OpenAPI spec
+- **Security verification** — headers (CSP, X-Frame-Options, Permissions-Policy, HSTS), RBAC, BOLA ownership, account masking, rejected password not echoed
 - **Response time SLA** — payment creation < 3s, list < 2s, health < 1s
-- **Security verification** — headers (CSP, X-Frame-Options, HSTS), RBAC, BOLA ownership, account masking
-- **Full HTTP stack** — tests hit the real embedded Tomcat (not MockMvc), exercising the complete filter chain
+- **Full HTTP stack** — hits the real embedded Tomcat, exercising the complete filter chain
+
+### Cucumber-JVM BDD acceptance tests
+
+The project uses [Cucumber 7.18](https://cucumber.io/) with JUnit 5 for business-readable acceptance tests:
+
+```
+src/test/resources/features/
+├── auth/
+│   ├── authentication.feature    # Login, logout, GET /me, token lifecycle
+│   ├── registration.feature      # New user registration flow + validation
+│   └── change_password.feature   # Password change success, auth, validation
+└── payments/
+    ├── payment_lifecycle.feature  # Create, reverse, cancel, idempotency
+    └── payment_authorization.feature  # Ownership isolation, RBAC
+```
+
+**25 scenarios** (including Scenario Outline rows) covering:
+- Full registration flow → immediate login → profile reflects `createdAt`
+- 409 message does not echo the username (information-leakage guard)
+- Password complexity validation (`@Pattern` enforced end-to-end)
+- Change-password success path + old password invalidated + new password works
+- Payment lifecycle: create → reverse / cancel
+- User isolation: user cannot see or fetch admin's payments
+- Token blacklisting: logout → subsequent requests return 401
+
+**Glue path:** `com.example.paymentapi.bdd`  
+**Reports:** `target/cucumber-reports/cucumber.html` and `cucumber.json`  
+**Runner:** `CucumberIT` (`@Suite` + `@IncludeEngines("cucumber")`)
 
 Coverage gate: **75% line coverage** enforced by JaCoCo on `mvn verify`. Current coverage: ~83%.
 
@@ -561,6 +602,7 @@ Flyway manages the schema (`src/main/resources/db/migration/`):
 | V6 | `description` column on `payments` |
 | V7 | `performed_by` column on `audit_logs` for actor tracking |
 | V8 | `created_at` and `updated_at` timestamps on `transactions` |
+| V9 | `created_at` timestamp on `users` (exposed via `UserProfileResponse`) |
 
 Flyway runs automatically on startup in the `docker` profile. The `local` and `test` profiles use Hibernate `ddl-auto=create-drop` with H2 instead.
 
@@ -585,9 +627,13 @@ payment-api/
     application-local.properties     # H2, no Redis, debug logging
     application-docker.properties    # MySQL, Redis, JSON logging
     application-test.properties      # Test-specific overrides
-    db/migration/                    # Flyway SQL migrations (V1-V8)
+    db/migration/                    # Flyway SQL migrations (V1–V9)
     logback-spring.xml               # Structured logging config
-  src/test/                          # 459 tests (unit, controller, integration, E2E, system, REST Assured)
+  src/test/
+    java/.../bdd/                    # Cucumber-JVM infrastructure (CucumberIT, ScenarioContext, step defs)
+    resources/features/              # Gherkin feature files (auth, registration, payments)
+    resources/schemas/               # JSON Schema files for REST Assured response validation
+    # 478 tests total (unit, controller, integration, E2E, REST Assured, Cucumber BDD)
   .github/workflows/                 # CI, CD, security scan, Claude Code workflows
   helm/payment-api/                  # Helm chart for Kubernetes deployment
   Dockerfile                         # Multi-stage layered JAR build

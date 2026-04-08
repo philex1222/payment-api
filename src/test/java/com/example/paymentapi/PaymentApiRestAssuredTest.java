@@ -157,7 +157,7 @@ class PaymentApiRestAssuredTest {
         }
 
         @Test
-        @DisplayName("GET /auth/me — returns current user profile")
+        @DisplayName("GET /auth/me — returns profile with id, username, role, createdAt")
         void meReturnsProfile() {
             String token = loginAndGetToken("user", "password");
 
@@ -167,8 +167,11 @@ class PaymentApiRestAssuredTest {
                 .get("/api/v1/auth/me")
             .then()
                 .statusCode(200)
+                .body(matchesJsonSchemaInClasspath("schemas/user-profile-response.json"))
                 .body("username", equalTo("user"))
                 .body("role", equalTo("ROLE_USER"))
+                .body("id", notNullValue())
+                .body("createdAt", notNullValue())
                 .body("password", nullValue());
         }
 
@@ -184,7 +187,231 @@ class PaymentApiRestAssuredTest {
     }
 
     // ═════════════════════════════════════════════════════════════════════════
-    // 2. Payment CRUD Lifecycle with Schema Validation
+    // 2. User Registration
+    // ═════════════════════════════════════════════════════════════════════════
+
+    @Nested
+    @DisplayName("User Registration")
+    class RegistrationSystemTests {
+
+        private String freshUsername() {
+            return "ra_" + java.util.UUID.randomUUID().toString().replace("-", "").substring(0, 10);
+        }
+
+        @Test
+        @DisplayName("POST /auth/register — valid request returns 201 + UserProfileResponse schema")
+        void register_validRequest_returns201() {
+            String username = freshUsername();
+
+            given()
+                .contentType(ContentType.JSON)
+                .body("{\"username\":\"" + username + "\",\"password\":\"SecurePass1\"}")
+            .when()
+                .post("/api/v1/auth/register")
+            .then()
+                .statusCode(201)
+                .body(matchesJsonSchemaInClasspath("schemas/user-profile-response.json"))
+                .body("username", equalTo(username))
+                .body("role", equalTo("ROLE_USER"))
+                .body("id", greaterThan(0))
+                .body("createdAt", notNullValue());
+        }
+
+        @Test
+        @DisplayName("POST /auth/register — registered user can immediately login")
+        void register_thenLogin_succeeds() {
+            String username = freshUsername();
+
+            given()
+                .contentType(ContentType.JSON)
+                .body("{\"username\":\"" + username + "\",\"password\":\"SecurePass1\"}")
+            .when()
+                .post("/api/v1/auth/register")
+            .then()
+                .statusCode(201);
+
+            given()
+                .contentType(ContentType.JSON)
+                .body("{\"username\":\"" + username + "\",\"password\":\"SecurePass1\"}")
+            .when()
+                .post("/api/v1/auth/login")
+            .then()
+                .statusCode(200)
+                .body("token", notNullValue());
+        }
+
+        @Test
+        @DisplayName("POST /auth/register — duplicate username returns 409 with generic message")
+        void register_duplicateUsername_returns409() {
+            given()
+                .contentType(ContentType.JSON)
+                .body("{\"username\":\"admin\",\"password\":\"SecurePass1\"}")
+            .when()
+                .post("/api/v1/auth/register")
+            .then()
+                .statusCode(409)
+                .body(matchesJsonSchemaInClasspath("schemas/error-response.json"))
+                .body("error", equalTo("Username Already Taken"))
+                // must NOT echo the username back (information leakage guard)
+                .body("message", not(containsString("admin")));
+        }
+
+        @Test
+        @DisplayName("POST /auth/register — username too short returns 400")
+        void register_shortUsername_returns400() {
+            given()
+                .contentType(ContentType.JSON)
+                .body("{\"username\":\"ab\",\"password\":\"SecurePass1\"}")
+            .when()
+                .post("/api/v1/auth/register")
+            .then()
+                .statusCode(400)
+                .body(matchesJsonSchemaInClasspath("schemas/error-response.json"));
+        }
+
+        @Test
+        @DisplayName("POST /auth/register — password missing uppercase returns 400")
+        void register_passwordNoUppercase_returns400() {
+            given()
+                .contentType(ContentType.JSON)
+                .body("{\"username\":\"" + freshUsername() + "\",\"password\":\"alllowercase1\"}")
+            .when()
+                .post("/api/v1/auth/register")
+            .then()
+                .statusCode(400);
+        }
+
+        @Test
+        @DisplayName("POST /auth/register — password missing digit returns 400")
+        void register_passwordNoDigit_returns400() {
+            given()
+                .contentType(ContentType.JSON)
+                .body("{\"username\":\"" + freshUsername() + "\",\"password\":\"AllNoDigitHere\"}")
+            .when()
+                .post("/api/v1/auth/register")
+            .then()
+                .statusCode(400);
+        }
+
+        @Test
+        @DisplayName("POST /auth/register — rejected password is not echoed in 400 body")
+        void register_rejectedPasswordNotEchoed() {
+            String sensitivePassword = "weakpassword";
+            given()
+                .contentType(ContentType.JSON)
+                .body("{\"username\":\"" + freshUsername() + "\",\"password\":\"" + sensitivePassword + "\"}")
+            .when()
+                .post("/api/v1/auth/register")
+            .then()
+                .statusCode(400)
+                // the rejected value for the password field must NOT appear in the response body
+                .body(not(containsString(sensitivePassword)));
+        }
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // 3. Change Password
+    // ═════════════════════════════════════════════════════════════════════════
+
+    @Nested
+    @DisplayName("Change Password")
+    class ChangePasswordTests {
+
+        private String registerAndLogin(String password) {
+            String username = "cp_" + java.util.UUID.randomUUID().toString().replace("-", "").substring(0, 10);
+            given()
+                .contentType(ContentType.JSON)
+                .body("{\"username\":\"" + username + "\",\"password\":\"" + password + "\"}")
+            .when()
+                .post("/api/v1/auth/register")
+            .then()
+                .statusCode(201);
+            return username;
+        }
+
+        @Test
+        @DisplayName("POST /auth/change-password — correct current password succeeds")
+        void changePassword_success() {
+            String username = registerAndLogin("SecurePass1");
+            String token = loginAndGetToken(username, "SecurePass1");
+
+            given()
+                .contentType(ContentType.JSON)
+                .header("Authorization", "Bearer " + token)
+                .body("{\"currentPassword\":\"SecurePass1\",\"newPassword\":\"NewSecure1\"}")
+            .when()
+                .post("/api/v1/auth/change-password")
+            .then()
+                .statusCode(200);
+
+            // old password no longer works
+            given()
+                .contentType(ContentType.JSON)
+                .body("{\"username\":\"" + username + "\",\"password\":\"SecurePass1\"}")
+            .when()
+                .post("/api/v1/auth/login")
+            .then()
+                .statusCode(401);
+
+            // new password works
+            given()
+                .contentType(ContentType.JSON)
+                .body("{\"username\":\"" + username + "\",\"password\":\"NewSecure1\"}")
+            .when()
+                .post("/api/v1/auth/login")
+            .then()
+                .statusCode(200)
+                .body("token", notNullValue());
+        }
+
+        @Test
+        @DisplayName("POST /auth/change-password — wrong current password returns 401")
+        void changePassword_wrongCurrent_returns401() {
+            String username = registerAndLogin("SecurePass1");
+            String token = loginAndGetToken(username, "SecurePass1");
+
+            given()
+                .contentType(ContentType.JSON)
+                .header("Authorization", "Bearer " + token)
+                .body("{\"currentPassword\":\"WrongPass1\",\"newPassword\":\"NewSecure1\"}")
+            .when()
+                .post("/api/v1/auth/change-password")
+            .then()
+                .statusCode(401);
+        }
+
+        @Test
+        @DisplayName("POST /auth/change-password — new password too short returns 400")
+        void changePassword_shortNewPassword_returns400() {
+            String username = registerAndLogin("SecurePass1");
+            String token = loginAndGetToken(username, "SecurePass1");
+
+            given()
+                .contentType(ContentType.JSON)
+                .header("Authorization", "Bearer " + token)
+                .body("{\"currentPassword\":\"SecurePass1\",\"newPassword\":\"tiny\"}")
+            .when()
+                .post("/api/v1/auth/change-password")
+            .then()
+                .statusCode(400)
+                .body(matchesJsonSchemaInClasspath("schemas/error-response.json"));
+        }
+
+        @Test
+        @DisplayName("POST /auth/change-password — unauthenticated request returns 401")
+        void changePassword_noToken_returns401() {
+            given()
+                .contentType(ContentType.JSON)
+                .body("{\"currentPassword\":\"SecurePass1\",\"newPassword\":\"NewSecure1\"}")
+            .when()
+                .post("/api/v1/auth/change-password")
+            .then()
+                .statusCode(401);
+        }
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // 4. Payment CRUD Lifecycle with Schema Validation
     // ═════════════════════════════════════════════════════════════════════════
 
     @Nested
@@ -301,7 +528,7 @@ class PaymentApiRestAssuredTest {
     }
 
     // ═════════════════════════════════════════════════════════════════════════
-    // 3. Input Validation & Error Responses
+    // 5. Input Validation & Error Responses
     // ═════════════════════════════════════════════════════════════════════════
 
     @Nested
@@ -416,7 +643,7 @@ class PaymentApiRestAssuredTest {
     }
 
     // ═════════════════════════════════════════════════════════════════════════
-    // 4. Authorization & RBAC
+    // 6. Authorization & RBAC
     // ═════════════════════════════════════════════════════════════════════════
 
     @Nested
@@ -510,7 +737,7 @@ class PaymentApiRestAssuredTest {
     }
 
     // ═════════════════════════════════════════════════════════════════════════
-    // 5. Security Headers & Transport
+    // 7. Security Headers & Transport
     // ═════════════════════════════════════════════════════════════════════════
 
     @Nested
@@ -578,7 +805,7 @@ class PaymentApiRestAssuredTest {
     }
 
     // ═════════════════════════════════════════════════════════════════════════
-    // 6. Idempotency
+    // 8. Idempotency
     // ═════════════════════════════════════════════════════════════════════════
 
     @Nested
@@ -632,7 +859,7 @@ class PaymentApiRestAssuredTest {
     }
 
     // ═════════════════════════════════════════════════════════════════════════
-    // 7. Payment Filtering & Pagination
+    // 9. Payment Filtering & Pagination
     // ═════════════════════════════════════════════════════════════════════════
 
     @Nested
@@ -701,7 +928,7 @@ class PaymentApiRestAssuredTest {
     }
 
     // ═════════════════════════════════════════════════════════════════════════
-    // 8. Admin Operations
+    // 10. Admin Operations
     // ═════════════════════════════════════════════════════════════════════════
 
     @Nested
@@ -761,7 +988,7 @@ class PaymentApiRestAssuredTest {
     }
 
     // ═════════════════════════════════════════════════════════════════════════
-    // 9. Response Time SLA
+    // 11. Response Time SLA
     // ═════════════════════════════════════════════════════════════════════════
 
     @Nested
@@ -806,7 +1033,7 @@ class PaymentApiRestAssuredTest {
     }
 
     // ═════════════════════════════════════════════════════════════════════════
-    // 10. OpenAPI / Swagger
+    // 12. OpenAPI / Swagger
     // ═════════════════════════════════════════════════════════════════════════
 
     @Nested
@@ -825,6 +1052,7 @@ class PaymentApiRestAssuredTest {
                 .body("openapi", startsWith("3."))
                 .body("paths", hasKey("/api/v1/payments"))
                 .body("paths", hasKey("/api/v1/auth/login"))
+                .body("paths", hasKey("/api/v1/auth/register"))
                 .body("paths", hasKey("/api/v1/admin/stats"));
         }
 

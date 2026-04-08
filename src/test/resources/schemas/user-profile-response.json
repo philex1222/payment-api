@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "UserProfileResponse",
+  "description": "Response body for GET /api/v1/auth/me and POST /api/v1/auth/register",
+  "type": "object",
+  "required": ["id", "username", "role"],
+  "properties": {
+    "id":        { "type": "integer", "minimum": 1 },
+    "username":  { "type": "string", "minLength": 3 },
+    "role":      { "type": "string", "pattern": "^ROLE_" },
+    "createdAt": { "type": ["string", "null"] }
+  },
+  "additionalProperties": false
+}
