@@ -14,11 +14,14 @@ import com.example.paymentapi.model.Transaction;
 import com.example.paymentapi.metrics.PaymentMetrics;
 import com.example.paymentapi.repository.PaymentRepository;
 import com.example.paymentapi.repository.PaymentSpecification;
+import com.example.paymentapi.event.PaymentEvent;
+import com.example.paymentapi.model.WebhookEventType;
 import io.micrometer.core.instrument.Timer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
@@ -49,11 +52,13 @@ public class PaymentServiceImpl implements PaymentService {
     private final CurrencyConversionService currencyConversionService;
     private final NotificationService notificationService;
     private final PaymentMetrics paymentMetrics;
+    private final ApplicationEventPublisher eventPublisher;
 
     public PaymentServiceImpl(PaymentRepository paymentRepository, TransactionService transactionService,
                               AuditService auditService, BankingAPIService bankingAPIService,
                               CurrencyConversionService currencyConversionService,
-                              NotificationService notificationService, PaymentMetrics paymentMetrics) {
+                              NotificationService notificationService, PaymentMetrics paymentMetrics,
+                              ApplicationEventPublisher eventPublisher) {
         this.paymentRepository = paymentRepository;
         this.transactionService = transactionService;
         this.auditService = auditService;
@@ -61,6 +66,7 @@ public class PaymentServiceImpl implements PaymentService {
         this.currencyConversionService = currencyConversionService;
         this.notificationService = notificationService;
         this.paymentMetrics = paymentMetrics;
+        this.eventPublisher = eventPublisher;
     }
 
     @Override
@@ -162,7 +168,7 @@ public class PaymentServiceImpl implements PaymentService {
         }
 
         // Prepare the payment response
-        return PaymentResponse.builder()
+        PaymentResponse paymentResponse = PaymentResponse.builder()
                 .id(createdPayment.getId())
                 .sourceAccount(maskAccount(createdPayment.getSourceAccount()))
                 .destinationAccount(maskAccount(createdPayment.getDestinationAccount()))
@@ -175,6 +181,9 @@ public class PaymentServiceImpl implements PaymentService {
                 .transactionId(transactionId)
                 .message("Payment processed successfully")
                 .build();
+        eventPublisher.publishEvent(new PaymentEvent(
+                WebhookEventType.PAYMENT_CREATED, createdPayment.getCreatedBy(), paymentResponse));
+        return paymentResponse;
     }
 
     @Override
@@ -279,7 +288,10 @@ public class PaymentServiceImpl implements PaymentService {
 
         logger.info("Payment {} status updated from {} to {}", id, previousStatus, newStatus.getCode());
 
-        return mapToResponse(updatedPayment);
+        PaymentResponse updatedResponse = mapToResponse(updatedPayment);
+        eventPublisher.publishEvent(new PaymentEvent(
+                resolveEventType(newStatus), updatedPayment.getCreatedBy(), updatedResponse));
+        return updatedResponse;
     }
 
     @Override
@@ -386,18 +398,24 @@ public class PaymentServiceImpl implements PaymentService {
                     getAccountEmail(payment.getSourceAccount()),
                     notificationMessage);
 
-            return PaymentResponse.builder()
-                    .id(updatedPayment.getId())
-                    .sourceAccount(maskAccount(updatedPayment.getSourceAccount()))
-                    .destinationAccount(maskAccount(updatedPayment.getDestinationAccount()))
-                    .amount(updatedPayment.getAmount())
-                    .currency(updatedPayment.getCurrency())
-                    .status(updatedPayment.getStatus())
-                    .statusDescription(newStatus.getDescription())
-                    .createdAt(updatedPayment.getCreatedAt())
-                    .updatedAt(updatedPayment.getUpdatedAt())
-                    .message("Reversal processed successfully. Amount reversed: " + reversalAmount)
-                    .build();
+            PaymentResponse reversalResponse = PaymentResponse.builder()
+                .id(updatedPayment.getId())
+                .sourceAccount(maskAccount(updatedPayment.getSourceAccount()))
+                .destinationAccount(maskAccount(updatedPayment.getDestinationAccount()))
+                .amount(updatedPayment.getAmount())
+                .currency(updatedPayment.getCurrency())
+                .status(updatedPayment.getStatus())
+                .statusDescription(newStatus.getDescription())
+                .createdAt(updatedPayment.getCreatedAt())
+                .updatedAt(updatedPayment.getUpdatedAt())
+                .build();
+            eventPublisher.publishEvent(new PaymentEvent(
+                    newStatus == PaymentStatus.REVERSED
+                        ? WebhookEventType.PAYMENT_REVERSED
+                        : WebhookEventType.PAYMENT_REFUNDED,
+                    payment.getCreatedBy(),
+                    reversalResponse));
+            return reversalResponse;
 
         } catch (Exception e) {
             logger.error("Failed to reverse payment {}: {}", id, e.getMessage(), e);
@@ -426,7 +444,10 @@ public class PaymentServiceImpl implements PaymentService {
         paymentMetrics.incrementCancelled();
         auditService.logPaymentEvent(id, "PAYMENT_CANCELLED");
         logger.info("Payment {} cancelled successfully", id);
-        return mapToResponse(updated);
+        PaymentResponse cancelResponse = mapToResponse(updated);
+        eventPublisher.publishEvent(new PaymentEvent(
+                WebhookEventType.PAYMENT_CANCELLED, payment.getCreatedBy(), cancelResponse));
+        return cancelResponse;
     }
 
     @Override
@@ -493,6 +514,17 @@ public class PaymentServiceImpl implements PaymentService {
         }
 
         return mapToResponse(paymentRepository.findById(id).orElseThrow());
+    }
+
+    private WebhookEventType resolveEventType(PaymentStatus status) {
+        return switch (status) {
+            case COMPLETED -> WebhookEventType.PAYMENT_COMPLETED;
+            case FAILED    -> WebhookEventType.PAYMENT_FAILED;
+            case CANCELLED -> WebhookEventType.PAYMENT_CANCELLED;
+            case REVERSED  -> WebhookEventType.PAYMENT_REVERSED;
+            case REFUNDED  -> WebhookEventType.PAYMENT_REFUNDED;
+            default        -> WebhookEventType.PAYMENT_STATUS_CHANGED;
+        };
     }
 
     /**
