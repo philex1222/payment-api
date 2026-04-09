@@ -58,6 +58,15 @@ public class PaymentExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
     }
 
+    @ExceptionHandler(WebhookSubscriptionNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleWebhookSubscriptionNotFoundException(
+            WebhookSubscriptionNotFoundException ex, WebRequest request) {
+        logger.warn("Webhook subscription not found: {}", ex.getMessage());
+        ErrorResponse error = createErrorResponse(
+                HttpStatus.NOT_FOUND, "Webhook Subscription Not Found", ex.getMessage(), request);
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
+    }
+
     @ExceptionHandler(java.util.NoSuchElementException.class)
     public ResponseEntity<ErrorResponse> handleNoSuchElementException(
             java.util.NoSuchElementException ex, WebRequest request) {

@@ -3,6 +3,8 @@ package com.example.paymentapi.service;
 import com.example.paymentapi.dto.WebhookDeliveryResponse;
 import com.example.paymentapi.dto.WebhookSubscriptionRequest;
 import com.example.paymentapi.dto.WebhookSubscriptionResponse;
+import com.example.paymentapi.exception.UserNotFoundException;
+import com.example.paymentapi.exception.WebhookSubscriptionNotFoundException;
 import com.example.paymentapi.model.User;
 import com.example.paymentapi.model.WebhookDelivery;
 import com.example.paymentapi.model.WebhookEventType;
@@ -18,13 +20,13 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Arrays;
 import java.util.List;
-import java.util.NoSuchElementException;
 
 @Service
 @Transactional
 public class WebhookServiceImpl implements WebhookService {
 
     private static final Logger logger = LoggerFactory.getLogger(WebhookServiceImpl.class);
+    private static final String ROLE_ADMIN = "ROLE_ADMIN";
 
     private final WebhookSubscriptionRepository subscriptionRepository;
     private final WebhookDeliveryRepository deliveryRepository;
@@ -41,7 +43,7 @@ public class WebhookServiceImpl implements WebhookService {
     @Override
     public WebhookSubscriptionResponse createSubscription(WebhookSubscriptionRequest request, String username) {
         User user = findUser(username);
-        if (request.isAdminScope() && !user.getRole().equals("ROLE_ADMIN")) {
+        if (request.isAdminScope() && !user.getRole().equals(ROLE_ADMIN)) {
             throw new AccessDeniedException("adminScope requires ROLE_ADMIN");
         }
         validateEventTypes(request.getEventTypes());
@@ -84,7 +86,7 @@ public class WebhookServiceImpl implements WebhookService {
         checkOwnership(sub, username, isAdmin);
         if (request.isAdminScope()) {
             User user = findUser(username);
-            if (!user.getRole().equals("ROLE_ADMIN")) {
+            if (!user.getRole().equals(ROLE_ADMIN)) {
                 throw new AccessDeniedException("adminScope requires ROLE_ADMIN");
             }
         }
@@ -115,12 +117,12 @@ public class WebhookServiceImpl implements WebhookService {
 
     private WebhookSubscription findSubscription(String id) {
         return subscriptionRepository.findById(id)
-                .orElseThrow(() -> new NoSuchElementException("Webhook subscription not found: " + id));
+                .orElseThrow(() -> new WebhookSubscriptionNotFoundException("Webhook subscription not found: " + id));
     }
 
     private User findUser(String username) {
         return userRepository.findByUsername(username)
-                .orElseThrow(() -> new NoSuchElementException("User not found: " + username));
+                .orElseThrow(() -> new UserNotFoundException("User not found: " + username));
     }
 
     private void checkOwnership(WebhookSubscription sub, String username, boolean isAdmin) {

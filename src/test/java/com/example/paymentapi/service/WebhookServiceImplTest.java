@@ -15,8 +15,8 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.example.paymentapi.exception.WebhookSubscriptionNotFoundException;
 import java.util.List;
-import java.util.NoSuchElementException;
 
 import static org.assertj.core.api.Assertions.*;
 
@@ -138,9 +138,9 @@ class WebhookServiceImplTest {
     }
 
     @Test
-    void getSubscription_notFound_throwsNoSuchElement() {
+    void getSubscription_notFound_throwsWebhookSubscriptionNotFound() {
         assertThatThrownBy(() -> webhookService.getSubscription("non-existent-id", "user", false))
-                .isInstanceOf(NoSuchElementException.class);
+                .isInstanceOf(WebhookSubscriptionNotFoundException.class);
     }
 
     @Test
