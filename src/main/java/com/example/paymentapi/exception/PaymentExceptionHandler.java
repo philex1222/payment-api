@@ -58,6 +58,15 @@ public class PaymentExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
     }
 
+    @ExceptionHandler(java.util.NoSuchElementException.class)
+    public ResponseEntity<ErrorResponse> handleNoSuchElementException(
+            java.util.NoSuchElementException ex, WebRequest request) {
+        logger.warn("Resource not found: {}", ex.getMessage());
+        ErrorResponse error = createErrorResponse(
+                HttpStatus.NOT_FOUND, "Not Found", ex.getMessage(), request);
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
+    }
+
     @ExceptionHandler(InsufficientFundsException.class)
     public ResponseEntity<ErrorResponse> handleInsufficientFundsException(
             InsufficientFundsException ex, WebRequest request) {
