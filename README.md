@@ -40,6 +40,7 @@ A production-grade RESTful microservice for payment processing built with Spring
 - **Prometheus metrics** — payment counters (created, completed, failed, cancelled, retried, reversed, refunded), latency histograms, HikariCP pool, JVM heap
 - **Grafana dashboard** — pre-built dashboard provisioned automatically via docker-compose
 - **Distributed tracing** — Micrometer Tracing + Zipkin with correlation ID propagation
+- **Webhook subscriptions** — push notifications for payment events; per-user ownership, admin-scope fan-out, exponential-backoff retry (5 attempts × 30s base), SSRF-safe URL validation
 - **OpenAPI docs** — Swagger UI at `/swagger-ui/index.html`
 - **75% line coverage enforced** — JaCoCo gate blocks broken builds
 
@@ -52,7 +53,7 @@ A production-grade RESTful microservice for payment processing built with Spring
 | Runtime | Java 17, Spring Boot 3.5.13 |
 | Security | Spring Security 6, jjwt 0.13.0 (HS512), BCrypt |
 | Persistence | Spring Data JPA, Hibernate, MySQL 8.4 (prod), H2 (local/test) |
-| Migrations | Flyway 10 (V1–V9) |
+| Migrations | Flyway 10 (V1–V11) |
 | Cache / Idempotency | Redis 7.4 (docker), Simple in-memory (local) |
 | Resilience | Resilience4j 2.4.0 — circuit breaker, retry, rate limiter, time limiter |
 | Metrics | Micrometer + Prometheus + Grafana |
@@ -265,6 +266,34 @@ curl -X POST http://localhost:8080/api/v1/payments/{id}/reversal \
 | PATCH | `/api/v1/admin/users/{id}/role` | Update a user's role (`ROLE_USER` or `ROLE_ADMIN`) |
 | DELETE | `/api/v1/admin/users/{id}` | Delete a user (cannot delete own account) |
 
+### Webhooks (USER or ADMIN)
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| POST | `/api/v1/webhooks` | USER, ADMIN | Register a webhook subscription |
+| GET | `/api/v1/webhooks` | USER, ADMIN | List subscriptions (users see own, admins see all with `?admin=true`) |
+| GET | `/api/v1/webhooks/{id}` | USER, ADMIN | Get a subscription by ID |
+| PATCH | `/api/v1/webhooks/{id}` | USER, ADMIN | Update a subscription |
+| DELETE | `/api/v1/webhooks/{id}` | USER, ADMIN | Delete a subscription |
+| GET | `/api/v1/webhooks/{id}/deliveries` | ADMIN | Get delivery history for a subscription |
+
+**Register a webhook:**
+```bash
+curl -X POST http://localhost:8080/api/v1/webhooks \
+  -H "Authorization: Bearer eyJ..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "targetUrl": "https://example.com/hooks/payments",
+    "bearerToken": "my-secret-token",
+    "eventTypes": ["PAYMENT_COMPLETED", "PAYMENT_FAILED"],
+    "adminScope": false
+  }'
+```
+
+**Supported event types:** `PAYMENT_CREATED`, `PAYMENT_COMPLETED`, `PAYMENT_FAILED`, `PAYMENT_CANCELLED`, `PAYMENT_REVERSED`, `PAYMENT_REFUNDED`, `PAYMENT_STATUS_CHANGED`
+
+Deliveries are attempted up to **5 times** with exponential back-off (30 s × 2ⁿ). The `targetUrl` is protected against SSRF — loopback, link-local, and RFC-1918 private addresses are rejected at registration time.
+
 ### Payment Request Validation
 
 | Field | Constraint |
@@ -296,9 +325,15 @@ PENDING -> PROCESSING -> COMPLETED -> REVERSED
 
 ### Authorization
 
-- **ROLE_USER** -- can create and manage only their own payments
-- **ROLE_ADMIN** -- can access all payments plus `/api/v1/admin/**` and all actuator endpoints
-- Ownership enforcement (`checkOwnership`) runs on every payment read/write operation
+- **ROLE_USER** -- can create and manage only their own payments and webhook subscriptions
+- **ROLE_ADMIN** -- can access all payments plus `/api/v1/admin/**`, all actuator endpoints, and all webhook subscriptions/deliveries
+- Ownership enforcement (`checkOwnership`) runs on every payment and webhook read/write operation
+
+### Webhook SSRF protection
+
+Webhook `targetUrl` values are validated at registration and update time:
+- Only `http` and `https` schemes are accepted
+- The hostname is resolved via DNS and rejected if it maps to a loopback (`127.x.x.x`, `::1`), link-local (`169.254.x.x`), or RFC-1918 private address (`10.x`, `172.16-31.x`, `192.168.x.x`)
 
 ### Security headers
 
