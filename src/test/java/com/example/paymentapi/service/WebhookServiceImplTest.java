@@ -144,6 +144,45 @@ class WebhookServiceImplTest {
     }
 
     @Test
+    void createSubscription_localhostUrl_throwsIllegalArgument() {
+        WebhookSubscriptionRequest req = WebhookSubscriptionRequest.builder()
+                .targetUrl("http://localhost:8080/steal")
+                .bearerToken("tok")
+                .eventTypes(List.of("PAYMENT_COMPLETED"))
+                .build();
+
+        assertThatThrownBy(() -> webhookService.createSubscription(req, "user"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("private or internal network");
+    }
+
+    @Test
+    void createSubscription_privateIpUrl_throwsIllegalArgument() {
+        WebhookSubscriptionRequest req = WebhookSubscriptionRequest.builder()
+                .targetUrl("http://192.168.1.1/hook")
+                .bearerToken("tok")
+                .eventTypes(List.of("PAYMENT_COMPLETED"))
+                .build();
+
+        assertThatThrownBy(() -> webhookService.createSubscription(req, "user"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("private or internal network");
+    }
+
+    @Test
+    void createSubscription_fileSchemeUrl_throwsIllegalArgument() {
+        WebhookSubscriptionRequest req = WebhookSubscriptionRequest.builder()
+                .targetUrl("file:///etc/passwd")
+                .bearerToken("tok")
+                .eventTypes(List.of("PAYMENT_COMPLETED"))
+                .build();
+
+        assertThatThrownBy(() -> webhookService.createSubscription(req, "user"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("scheme must be http or https");
+    }
+
+    @Test
     void updateSubscription_deactivatesWithActiveFalse() {
         WebhookSubscriptionRequest createReq = WebhookSubscriptionRequest.builder()
                 .targetUrl("http://example.com/hook")

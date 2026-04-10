@@ -18,8 +18,13 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.net.InetAddress;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.net.UnknownHostException;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
 
 @Service
 @Transactional
@@ -27,6 +32,7 @@ public class WebhookServiceImpl implements WebhookService {
 
     private static final Logger logger = LoggerFactory.getLogger(WebhookServiceImpl.class);
     private static final String ROLE_ADMIN = "ROLE_ADMIN";
+    private static final Set<String> ALLOWED_SCHEMES = Set.of("http", "https");
 
     private final WebhookSubscriptionRepository subscriptionRepository;
     private final WebhookDeliveryRepository deliveryRepository;
@@ -47,6 +53,7 @@ public class WebhookServiceImpl implements WebhookService {
             throw new AccessDeniedException("adminScope requires ROLE_ADMIN");
         }
         validateEventTypes(request.getEventTypes());
+        validateTargetUrl(request.getTargetUrl());
 
         WebhookSubscription sub = new WebhookSubscription();
         sub.setUserId(user.getId());
@@ -91,6 +98,7 @@ public class WebhookServiceImpl implements WebhookService {
             }
         }
         validateEventTypes(request.getEventTypes());
+        validateTargetUrl(request.getTargetUrl());
         sub.setTargetUrl(request.getTargetUrl());
         sub.setBearerToken(request.getBearerToken());
         sub.setEventTypes(String.join(",", request.getEventTypes()));
@@ -130,6 +138,42 @@ public class WebhookServiceImpl implements WebhookService {
         User user = findUser(username);
         if (!sub.getUserId().equals(user.getId())) {
             throw new AccessDeniedException("Access denied: webhook subscription belongs to another user");
+        }
+    }
+
+    /**
+     * Guards against SSRF: rejects non-HTTP(S) schemes and URLs that resolve to
+     * loopback, link-local, or RFC-1918 private addresses.
+     */
+    private void validateTargetUrl(String rawUrl) {
+        URI uri;
+        try {
+            uri = new URI(rawUrl);
+        } catch (URISyntaxException e) {
+            throw new IllegalArgumentException("targetUrl is not a valid URL: " + rawUrl);
+        }
+
+        String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase();
+        if (!ALLOWED_SCHEMES.contains(scheme)) {
+            throw new IllegalArgumentException("targetUrl scheme must be http or https");
+        }
+
+        String host = uri.getHost();
+        if (host == null || host.isBlank()) {
+            throw new IllegalArgumentException("targetUrl must have a valid host");
+        }
+
+        InetAddress address;
+        try {
+            address = InetAddress.getByName(host);
+        } catch (UnknownHostException e) {
+            throw new IllegalArgumentException("targetUrl host could not be resolved: " + host);
+        }
+
+        if (address.isLoopbackAddress() || address.isLinkLocalAddress()
+                || address.isSiteLocalAddress() || address.isAnyLocalAddress()) {
+            throw new IllegalArgumentException(
+                "targetUrl must not point to a private or internal network address");
         }
     }
 
