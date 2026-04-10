@@ -29,7 +29,8 @@ public class WebMvcConfig implements WebMvcConfigurer {
                 .addPathPatterns(
                         "/api/v1/payments/**",
                         "/api/v1/auth/**",
-                        "/api/v1/admin/**"
+                        "/api/v1/admin/**",
+                        "/api/v1/webhooks/**"
                 )
                 .excludePathPatterns(
                         "/actuator/**",

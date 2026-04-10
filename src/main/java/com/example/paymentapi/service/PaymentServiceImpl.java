@@ -513,7 +513,11 @@ public class PaymentServiceImpl implements PaymentService {
             logger.warn("Payment {} retry failed on attempt {}: {}", id, attempt, e.getMessage());
         }
 
-        return mapToResponse(paymentRepository.findById(id).orElseThrow());
+        PaymentResponse retryResponse = mapToResponse(paymentRepository.findById(id).orElseThrow());
+        PaymentStatus finalStatus = PaymentStatus.fromString(retryResponse.getStatus());
+        eventPublisher.publishEvent(new PaymentEvent(resolveEventType(finalStatus),
+                payment.getCreatedBy(), retryResponse));
+        return retryResponse;
     }
 
     private WebhookEventType resolveEventType(PaymentStatus status) {

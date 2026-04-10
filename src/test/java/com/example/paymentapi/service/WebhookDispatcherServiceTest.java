@@ -113,7 +113,7 @@ class WebhookDispatcherServiceTest {
     void dispatchPendingDeliveries_afterMaxAttempts_marksAsFailed() {
         mockRestClientFailure();
         WebhookDelivery delivery = pendingDelivery();
-        delivery.setAttemptCount(4); // one more attempt will reach 5 = MAX_ATTEMPTS
+        delivery.setAttemptCount(4); // one more attempt will reach 5 = WebhookDeliveryExecutor.MAX_ATTEMPTS
         deliveryRepository.save(delivery);
 
         dispatcherService.dispatchPendingDeliveries();

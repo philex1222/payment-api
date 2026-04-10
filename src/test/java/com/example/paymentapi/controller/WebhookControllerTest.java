@@ -15,9 +15,10 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import com.example.paymentapi.exception.WebhookSubscriptionNotFoundException;
+
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.NoSuchElementException;
 
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
@@ -126,7 +127,7 @@ class WebhookControllerTest {
     @Test
     void getSubscription_notFound_returns404() throws Exception {
         when(webhookService.getSubscription(eq("bad-id"), eq("user"), eq(false)))
-                .thenThrow(new NoSuchElementException("not found"));
+                .thenThrow(new WebhookSubscriptionNotFoundException("not found"));
 
         mockMvc.perform(get("/api/v1/webhooks/bad-id")
                         .header("Authorization", "Bearer " + userToken))

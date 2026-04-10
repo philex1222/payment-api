@@ -37,13 +37,16 @@ public class WebhookServiceImpl implements WebhookService {
     private final WebhookSubscriptionRepository subscriptionRepository;
     private final WebhookDeliveryRepository deliveryRepository;
     private final UserRepository userRepository;
+    private final AuditService auditService;
 
     public WebhookServiceImpl(WebhookSubscriptionRepository subscriptionRepository,
                                WebhookDeliveryRepository deliveryRepository,
-                               UserRepository userRepository) {
+                               UserRepository userRepository,
+                               AuditService auditService) {
         this.subscriptionRepository = subscriptionRepository;
         this.deliveryRepository = deliveryRepository;
         this.userRepository = userRepository;
+        this.auditService = auditService;
     }
 
     @Override
@@ -64,6 +67,9 @@ public class WebhookServiceImpl implements WebhookService {
         sub.setActive(request.isActive());
 
         WebhookSubscription saved = subscriptionRepository.save(sub);
+        auditService.logPaymentEvent(saved.getId(),
+                "WEBHOOK_CREATED:user=" + username + ",eventTypes=" + saved.getEventTypes()
+                        + ",adminScope=" + saved.isAdminScope());
         logger.info("Webhook subscription {} created for user {}", saved.getId(), username);
         return toResponse(saved);
     }
@@ -104,7 +110,11 @@ public class WebhookServiceImpl implements WebhookService {
         sub.setEventTypes(String.join(",", request.getEventTypes()));
         sub.setAdminScope(request.isAdminScope());
         sub.setActive(request.isActive());
-        return toResponse(subscriptionRepository.save(sub));
+        WebhookSubscription updated = subscriptionRepository.save(sub);
+        auditService.logPaymentEvent(id,
+                "WEBHOOK_UPDATED:user=" + username + ",eventTypes=" + updated.getEventTypes()
+                        + ",adminScope=" + updated.isAdminScope() + ",active=" + updated.isActive());
+        return toResponse(updated);
     }
 
     @Override
@@ -112,12 +122,14 @@ public class WebhookServiceImpl implements WebhookService {
         WebhookSubscription sub = findSubscription(id);
         checkOwnership(sub, username, isAdmin);
         subscriptionRepository.delete(sub);
+        auditService.logPaymentEvent(id, "WEBHOOK_DELETED:user=" + username);
         logger.info("Webhook subscription {} deleted by {}", id, username);
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<WebhookDeliveryResponse> getDeliveries(String subscriptionId) {
+        findSubscription(subscriptionId); // ensures 404 if subscription does not exist
         return deliveryRepository.findBySubscriptionId(subscriptionId).stream()
                 .map(this::toDeliveryResponse)
                 .toList();
@@ -144,6 +156,8 @@ public class WebhookServiceImpl implements WebhookService {
     /**
      * Guards against SSRF: rejects non-HTTP(S) schemes and URLs that resolve to
      * loopback, link-local, or RFC-1918 private addresses.
+     * Note: this check runs at registration/update time. The DNS-rebinding window
+     * is eliminated at dispatch time by {@link com.example.paymentapi.config.SsrfSafeDnsResolver}.
      */
     private void validateTargetUrl(String rawUrl) {
         URI uri;

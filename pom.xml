@@ -199,11 +199,10 @@
             <artifactId>spring-security-test</artifactId>
             <scope>test</scope>
         </dependency>
-        <!-- Apache HttpClient for proper PATCH support in tests -->
+        <!-- Apache HttpClient 5: SSRF-safe DNS resolver for webhook RestClient + PATCH support -->
         <dependency>
             <groupId>org.apache.httpcomponents.client5</groupId>
             <artifactId>httpclient5</artifactId>
-            <scope>test</scope>
         </dependency>
         <!-- REST Assured — BDD-style HTTP API testing with JSON Schema validation -->
         <dependency>
