@@ -30,6 +30,9 @@ public class ScenarioContext {
     /** Idempotency key used in the current scenario. */
     private String idempotencyKey;
 
+    /** Webhook subscription ID created within the current scenario. */
+    private String webhookSubscriptionId;
+
     // ── accessors ─────────────────────────────────────────────────────────────
 
     public String getAuthToken()                { return authToken; }
@@ -46,4 +49,7 @@ public class ScenarioContext {
 
     public String getIdempotencyKey()           { return idempotencyKey; }
     public void   setIdempotencyKey(String k)   { this.idempotencyKey = k; }
+
+    public String getWebhookSubscriptionId()           { return webhookSubscriptionId; }
+    public void   setWebhookSubscriptionId(String id)  { this.webhookSubscriptionId = id; }
 }
