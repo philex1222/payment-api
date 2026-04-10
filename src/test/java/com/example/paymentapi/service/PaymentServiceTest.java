@@ -25,6 +25,7 @@ import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -65,6 +66,8 @@ public class PaymentServiceTest {
     private NotificationService notificationService;
     @Mock
     private PaymentMetrics paymentMetrics;
+    @Mock
+    private ApplicationEventPublisher applicationEventPublisher;
 
     private PaymentServiceImpl paymentService;
 
@@ -85,7 +88,8 @@ public class PaymentServiceTest {
                 bankingAPIService,
                 currencyConversionService,
                 notificationService,
-                paymentMetrics
+                paymentMetrics,
+                applicationEventPublisher
         );
         // @Value fields are not injected in plain Mockito tests — set them via reflection
         ReflectionTestUtils.setField(paymentService, "maxRetryAttempts", 3);

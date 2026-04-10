@@ -1,26 +1,90 @@
 {
+  "env": {
+    "MAVEN_OPTS": "-Xmx1024m",
+    "DOCKER_BUILDKIT": "1",
+    "COMPOSE_DOCKER_CLI_BUILD": "1",
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
+    "CLAUDE_CODE_ENABLE_AGENT_TEAMS": "1"
+  },
   "permissions": {
     "allow": [
-      "Bash(mvn compile:*)",
-      "Bash(mvn test-compile:*)",
-      "Bash(mvn test:*)",
-      "Bash(mvn verify:*)",
-      "Bash(python3 -c \":*)",
-      "Bash(grep -r \"Contract\\\\|Pact\" C:UsersxphilDesktopPhilipWorkspacepayment-api --include=*.java --include=*.xml)",
-      "Bash(gh run:*)",
-      "Bash(grep -v \"^$\")",
-      "Bash(gh api:*)",
-      "Bash(mvn --batch-mode --no-transfer-progress clean verify -Dspring.profiles.active=test)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(git push:*)",
-      "Bash(docker-compose logs:*)",
-      "Bash(curl -s \"https://search.maven.org/solrsearch/select?q=g:org.springdoc+AND+a:springdoc-openapi-starter-webmvc-ui&rows=5&wt=json\")",
-      "Bash(python -c \"import sys,json; data=json.load\\(sys.stdin\\); [print\\(d[''''latestVersion'''']\\) for d in data[''''response''''][''''docs'''']]\")",
-      "Bash(curl -s https://repo1.maven.org/maven2/org/springdoc/springdoc-openapi-starter-webmvc-ui/maven-metadata.xml)",
-      "Bash(docker exec:*)",
-      "Bash(cd:*)",
-      "Bash(./mvnw test:*)"
+      "Bash(git log:*)",
+      "Bash(git diff:*)",
+      "Bash(git status:*)",
+      "Bash(git branch:*)",
+      "Bash(git stash:*)",
+      "Bash(gh run:*)",
+      "Bash(gh pr:*)",
+      "Bash(gh api:*)",
+      "Bash(mvn:*)",
+      "Bash(./mvnw:*)",
+      "Bash(docker:*)",
+      "Bash(docker-compose:*)",
+      "Bash(curl:*)",
+      "Bash(python:*)",
+      "Bash(python3:*)",
+      "Skill(security-review)",
+      "Skill(deployment-review)",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:maven.apache.org)",
+      "WebFetch(domain:mvnrepository.com)",
+      "WebFetch(domain:repo1.maven.org)",
+      "Bash(wait)",
+      "Bash(echo \"checkout: $\\(gh api repos/actions/checkout/releases/latest --jq .tag_name\\)\")",
+      "Bash(echo \"setup-java: $\\(gh api repos/actions/setup-java/releases/latest --jq .tag_name\\)\")",
+      "Bash(echo \"cache: $\\(gh api repos/actions/cache/releases/latest --jq .tag_name\\)\")",
+      "Bash(echo \"upload-artifact: $\\(gh api repos/actions/upload-artifact/releases/latest --jq .tag_name\\)\")",
+      "Bash(echo \"setup-buildx: $\\(gh api repos/docker/setup-buildx-action/releases/latest --jq .tag_name\\)\")",
+      "Bash(grep -v \"^$\")",
+      "Bash(grep -oE \"Fixed Version: [^\\\\\\\\\\\\\\\\]+\" /c/Users/xphil/AppData/Local/Temp/trivy-results2/trivy-results.sarif)",
+      "Bash(grep -oE '\"Fixed Version: [^\\\\\\\\]+\\\\\\\\n[^\"]*Package: [^\\\\\\\\]+\"' /c/Users/xphil/AppData/Local/Temp/trivy-results2/trivy-results.sarif)",
+      "Bash(grep -oE \"Severity: \\(HIGH|CRITICAL\\)[^|]+Package: [^\\\\\\\\\\\\\\\\]+\" /c/Users/xphil/AppData/Local/Temp/trivy-results2/trivy-results.sarif)",
+      "Bash(rm -f /tmp/trivy-results3/trivy-results.sarif)",
+      "Read(//tmp/trivy-results3/**)",
+      "WebFetch(domain:hub.docker.com)",
+      "Bash(grep \"Tests run: [0-9]*, Failures: 0, Errors: 0, Skipped: 0$\")",
+      "Bash(gh search:*)",
+      "Bash(node:*)",
+      "Bash(ls docker-compose*.yml)",
+      "Bash(ls:*)",
+      "Bash(grep -r 'tests=\"' target/surefire-reports/*.xml)",
+      "Bash(git:*)"
+    ],
+    "deny": [
+      "Bash(git push --force*)",
+      "Bash(git push -f *)",
+      "Bash(git reset --hard*)",
+      "Bash(git clean -f*)",
+      "Bash(git branch -D*)",
+      "Bash(rm -rf*)",
+      "Bash(docker system prune*)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -c \"import sys,json; d=json.load(sys.stdin); cmd=d.get('tool_input',{}).get('command',''); print('Actions: https://github.com/philex1222/payment-api/actions') if 'git push' in cmd else None\" 2>/dev/null || true"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '[Claude Code] Task complete.'"
+          }
+        ]
+      }
     ]
   }
 }
