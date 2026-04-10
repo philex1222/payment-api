@@ -98,6 +98,7 @@ public class SecurityConfig {
                 .requestMatchers("/actuator/**").hasRole("ADMIN")
                 .requestMatchers("/api/v1/payments/**").hasAnyRole("USER", "ADMIN")
                 .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
+                .requestMatchers("/api/v1/webhooks/**").hasAnyRole("USER", "ADMIN")
                 .anyRequest().authenticated()
             )
 
