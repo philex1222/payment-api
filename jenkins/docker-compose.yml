@@ -12,8 +12,12 @@
 services:
 
   # ── Jenkins Controller ──────────────────────────────────────────────────────
+  # Built from Dockerfile.controller: jenkins/jenkins:latest + pre-installed
+  # plugins so JCasC (jenkins.yaml) applies automatically on first boot.
   jenkins-controller:
-    image: jenkins/jenkins:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.controller
     container_name: jenkins-controller
     restart: unless-stopped
     ports:

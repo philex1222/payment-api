@@ -16,6 +16,20 @@ jenkins:
   # ── Executor count ────────────────────────────────────────────────────────
   numExecutors: 0   # Controller runs zero jobs; all work goes to the agent
 
+  # ── Build agent node ──────────────────────────────────────────────────────
+  # Pre-registers the inbound agent so its JNLP secret is available as soon
+  # as the controller starts — the entrypoint.sh script fetches it automatically.
+  nodes:
+    - permanent:
+        name: "payment-api-agent"
+        nodeDescription: "payment-api CI/CD build agent (Docker)"
+        labelString: "payment-api-agent"
+        numExecutors: 2
+        remoteFS: "/home/jenkins/workspace"
+        launcher:
+          inbound: {}
+        retentionStrategy: "always"
+
   # ── Security realm — local accounts ──────────────────────────────────────
   securityRealm:
     local:
@@ -23,8 +37,9 @@ jenkins:
       users:
         - id: "admin"
           name: "Administrator"
-          # BCrypt of "admin" — change this password after first login
-          password: "$2a$10$DowJonesInd3xP4ssw0rd123456789012345678901234567890"
+          # Plain-text password for local dev — JCasC hashes it on first apply.
+          # Change this before exposing Jenkins outside localhost.
+          password: "admin"
 
   authorizationStrategy:
     loggedInUsersCanDoAnything:
@@ -35,56 +50,21 @@ jenkins:
     enabled: true
 
 # ── Global tool configuration ─────────────────────────────────────────────────
+# Tools are pre-installed in the agent Docker image (jenkins/agent/Dockerfile).
+# Using fixed paths avoids any installer plugin dependency.
 tool:
   jdk:
     installations:
-      - name: "temurin-17"
-        properties:
-          - installSource:
-              installers:
-                - adoptOpenJdkInstaller:
-                    id: "jdk-17.0.12+7"
+      - name: "temurin-21"
+        home: "/opt/java/openjdk"   # Eclipse Temurin 21 in eclipse-temurin:21-jdk-jammy
   maven:
     installations:
       - name: "maven-3.9"
-        properties:
-          - installSource:
-              installers:
-                - maven:
-                    id: "3.9.9"
+        home: "/opt/maven"          # Maven 3.9.9 installed by the agent Dockerfile
 
-# ── Pipeline job definition ───────────────────────────────────────────────────
-jobs:
-  - script: |
-      multibranchPipelineJob('payment-api') {
-        displayName('payment-api — CI/CD Pipeline')
-        description('Declarative Jenkins pipeline for payment-api. Scans all branches for Jenkinsfile.')
-
-        branchSources {
-          github {
-            id('payment-api-source')
-            repoOwner('philex1222')
-            repository('payment-api')
-            repositoryUrl('https://github.com/philex1222/payment-api.git')
-            credentialsId('ghcr-credentials')
-          }
-        }
-
-        factory {
-          workflowBranchProjectFactory {
-            scriptPath('Jenkinsfile')
-          }
-        }
-
-        orphanedItemStrategy {
-          discardOldItems {
-            numToKeep(10)
-          }
-        }
-
-        triggers {
-          periodicFolderTrigger {
-            interval('1h')
-          }
-        }
-      }
+# ── Pipeline job ──────────────────────────────────────────────────────────────
+# The multibranch pipeline job is created manually after first boot:
+#   New Item → payment-api → Multibranch Pipeline
+#   Branch Sources → GitHub: owner=philex1222, repo=payment-api, creds=ghcr-credentials
+#   Build Configuration → Script Path: Jenkinsfile
+# See jenkins/README.md for full instructions.

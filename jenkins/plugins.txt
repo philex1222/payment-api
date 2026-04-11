@@ -14,5 +14,5 @@ ws-cleanup                   # cleanWs() step
 git                          # Git SCM checkout
 github-branch-source         # Multibranch pipeline + GitHub integration
 configuration-as-code        # JCasC (jenkins.yaml auto-config)
+job-dsl                      # Required by JCasC jobs: section to create pipeline jobs
 antisamy-markup-formatter    # Safe HTML in job descriptions
-build-discarder-plugin       # buildDiscarder(logRotator) option

@@ -22,13 +22,19 @@
 #     payment-api-jenkins-agent:latest
 # =============================================================================
 
-FROM eclipse-temurin:17-jdk-jammy
+# Java 21 required — jenkins/jenkins:latest controller compiles class files at
+# version 65 (Java 21) which a Java 17 agent cannot load.
+# Maven will still compile the Spring Boot app with --release 17 per pom.xml.
+FROM eclipse-temurin:21-jdk-jammy
 
 ARG MAVEN_VERSION=3.9.9
 ARG HELM_VERSION=3.16.3
-ARG TRIVY_VERSION=0.61.0
+ARG TRIVY_VERSION=0.69.3
 ARG KUBECTL_VERSION=v1.31.0
 ARG JENKINS_AGENT_VERSION=3256.v88a_f6e922152
+
+# Note: JAVA_HOME in this image is /opt/java/openjdk (Java 21).
+# The Spring Boot app compiles with --release 17 via pom.xml settings.
 
 LABEL maintainer="payment-api team" \
       description="Jenkins build agent for payment-api" \
@@ -88,9 +94,10 @@ RUN curl -fsSL "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY
 
 # ── Jenkins inbound agent JAR ─────────────────────────────────────────────────
 # The agent.jar connects this container to the Jenkins controller.
-RUN curl -fsSL \
-    "https://repo.jenkins-ci.org/releases/org/jenkins-ci/main/remoting/${JENKINS_AGENT_VERSION}/remoting-${JENKINS_AGENT_VERSION}.jar" \
-    -o /usr/share/jenkins/agent.jar \
+RUN mkdir -p /usr/share/jenkins \
+    && curl -fsSL \
+       "https://repo.jenkins-ci.org/releases/org/jenkins-ci/main/remoting/${JENKINS_AGENT_VERSION}/remoting-${JENKINS_AGENT_VERSION}.jar" \
+       -o /usr/share/jenkins/agent.jar \
     && chmod 755 /usr/share/jenkins/agent.jar
 
 # ── Non-root user (matches Helm chart's runAsUser: 1000) ─────────────────────
@@ -105,11 +112,15 @@ RUN groupadd -g 1000 jenkins \
 RUN mkdir -p /home/jenkins/.m2 \
     && chown -R jenkins:jenkins /home/jenkins
 
+# ── Auto-configuring entrypoint ───────────────────────────────────────────────
+# Fetches the JNLP secret from the controller if JENKINS_SECRET is not set,
+# removing the manual "copy the token" step from first-run setup.
+COPY --chown=jenkins:jenkins entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
 USER jenkins
 WORKDIR /home/jenkins
 
 ENV JAVA_OPTS="-Xmx1024m"
 
-# Default: run as an inbound (JNLP) agent
-# JENKINS_URL, JENKINS_AGENT_NAME, and JENKINS_SECRET must be provided at runtime.
-ENTRYPOINT ["java", "-jar", "/usr/share/jenkins/agent.jar"]
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

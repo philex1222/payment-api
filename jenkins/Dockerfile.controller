@@ -1,0 +1,20 @@
+# =============================================================================
+# Jenkins Controller — payment-api
+#
+# Extends jenkins/jenkins:latest by pre-installing all required plugins so
+# JCasC (jenkins.yaml) can apply automatically on the very first boot.
+#
+# Build is done transparently by docker compose — no manual steps needed.
+# =============================================================================
+
+FROM jenkins/jenkins:latest
+
+# Strip comments + blank lines from plugins.txt, then install via the
+# bundled jenkins-plugin-cli.  All dependencies are resolved automatically.
+COPY plugins.txt /usr/share/jenkins/ref/plugins.txt
+RUN grep -v '^[[:space:]]*#' /usr/share/jenkins/ref/plugins.txt \
+    | awk '{print $1}' \
+    | grep -v '^[[:space:]]*$' \
+    > /tmp/clean-plugins.txt \
+    && jenkins-plugin-cli --plugin-file /tmp/clean-plugins.txt \
+    && rm /tmp/clean-plugins.txt

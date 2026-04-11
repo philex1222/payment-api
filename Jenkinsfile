@@ -58,7 +58,7 @@ pipeline {
 
     // ── Tool bindings (resolved from Global Tool Configuration) ───────────────
     tools {
-        jdk   'temurin-17'
+        jdk   'temurin-21'
         maven 'maven-3.9'
     }
 
