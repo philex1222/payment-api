@@ -13,7 +13,7 @@ services:
 
   # ── Jenkins Controller ──────────────────────────────────────────────────────
   jenkins-controller:
-    image: jenkins/jenkins:2.504-jdk17
+    image: jenkins/jenkins:latest
     container_name: jenkins-controller
     restart: unless-stopped
     ports:
