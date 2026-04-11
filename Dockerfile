@@ -22,25 +22,29 @@ COPY src ./src
 RUN mvn package --batch-mode --no-transfer-progress -DskipTests -q
 
 # ── Stage 2: Extract layers ───────────────────────────────────────────────────
-FROM eclipse-temurin:17-jre-alpine AS layers
+# Using jammy (Ubuntu 22.04) — ships OpenSSL 3.0.x which is NOT affected by the
+# OpenSSL 3.5/3.6 CVEs present in Alpine 3.22's OpenSSL 3.5.x package.
+FROM eclipse-temurin:17-jre-jammy AS layers
 WORKDIR /app
 COPY --from=build /app/target/*.jar app.jar
 # Spring Boot 3's layertools extracts the JAR into well-separated directories
 RUN java -Djarmode=layertools -jar app.jar extract
 
 # ── Stage 3: Runtime ──────────────────────────────────────────────────────────
-FROM eclipse-temurin:17-jre-alpine
+FROM eclipse-temurin:17-jre-jammy
 WORKDIR /app
 
-# Upgrade all Alpine packages to apply latest security patches before locking
-# down to a non-root user. This catches OS-level CVEs (e.g. gnutls, libexpat)
-# that may not yet be reflected in the upstream eclipse-temurin tag.
-RUN apk upgrade --no-cache
-
-# wget ships with Alpine by default — no extra package needed for the HEALTHCHECK
+# Upgrade all packages to apply latest security patches before locking down to
+# a non-root user. Also installs wget for the HEALTHCHECK (not pre-installed in
+# the jammy JRE image unlike Alpine).
+RUN apt-get update \
+    && apt-get upgrade -y --no-install-recommends \
+    && apt-get install -y --no-install-recommends wget \
+    && rm -rf /var/lib/apt/lists/*
 
 # Create a dedicated non-root user; UID 1000 matches the Helm podSecurityContext
-RUN addgroup -S -g 1000 appuser && adduser -S -u 1000 -G appuser appuser
+RUN groupadd -g 1000 appuser \
+    && useradd -r -u 1000 -g appuser appuser
 
 # Create writable log directory and set ownership before switching user
 RUN mkdir -p /var/log/payment-api && chown -R appuser:appuser /var/log/payment-api
