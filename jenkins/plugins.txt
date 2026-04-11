@@ -1,0 +1,18 @@
+# Jenkins plugins required by the payment-api Jenkinsfile
+# Install via:  docker exec jenkins-controller jenkins-plugin-cli --plugin-file /var/jenkins_casc_configs/../plugins.txt
+# OR mount this file to /usr/share/jenkins/ref/plugins.txt for auto-install on first boot.
+
+workflow-aggregator          # Declarative Pipeline (includes pipeline-stage-view)
+docker-workflow              # Docker Pipeline — docker.build, docker.withRegistry
+credentials-binding          # withCredentials() step
+junit                        # JUnit test result publishing
+jacoco                       # JaCoCo coverage + enforcement
+htmlpublisher                # publishHTML() for coverage report
+timestamper                  # Timestamps in build logs
+ansicolor                    # Colour output in logs
+ws-cleanup                   # cleanWs() step
+git                          # Git SCM checkout
+github-branch-source         # Multibranch pipeline + GitHub integration
+configuration-as-code        # JCasC (jenkins.yaml auto-config)
+antisamy-markup-formatter    # Safe HTML in job descriptions
+build-discarder-plugin       # buildDiscarder(logRotator) option

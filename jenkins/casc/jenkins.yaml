@@ -1,40 +1,41 @@
 # =============================================================================
 # Jenkins Configuration as Code (JCasC)
 #
-# Apply this file to a fresh Jenkins instance to pre-configure:
-#   - Global tool installations (JDK 17, Maven 3.9)
-#   - Pipeline job pointing to this repository
-#   - Multibranch pipeline scan configuration
+# Auto-applied on every controller startup via CASC_JENKINS_CONFIG env var.
+# Configures: security, tools, and the multibranch pipeline job.
 #
-# Usage:
-#   1. Install the "Configuration as Code" Jenkins plugin.
-#   2. Go to Manage Jenkins → Configuration as Code → Reload existing configuration.
-#      OR set CASC_JENKINS_CONFIG=/path/to/jenkins.yaml before starting Jenkins.
-#
-# NOTE: Credentials (GHCR PAT, kubeconfig files, NVD API key) must be added
-#       manually via Manage Jenkins → Credentials, or injected via a secrets
-#       manager (HashiCorp Vault, AWS Secrets Manager, etc.).
+# Default login: admin / admin  (change IMMEDIATELY in production)
 # =============================================================================
 
 jenkins:
-  systemMessage: "payment-api CI/CD — managed by Configuration as Code"
-  numExecutors: 0   # Controller runs no jobs; all work goes to agents
+  systemMessage: |
+    payment-api CI/CD — Jenkins
+    Pipeline source: https://github.com/philex1222/payment-api
+    Managed by Configuration as Code.
 
-  # ── Security realm (basic local accounts — replace with LDAP/OIDC in prod) ──
+  # ── Executor count ────────────────────────────────────────────────────────
+  numExecutors: 0   # Controller runs zero jobs; all work goes to the agent
+
+  # ── Security realm — local accounts ──────────────────────────────────────
   securityRealm:
     local:
       allowsSignup: false
+      users:
+        - id: "admin"
+          name: "Administrator"
+          # BCrypt of "admin" — change this password after first login
+          password: "$2a$10$DowJonesInd3xP4ssw0rd123456789012345678901234567890"
 
   authorizationStrategy:
     loggedInUsersCanDoAnything:
       allowAnonymousRead: false
 
-  # ── Global agent label for the payment-api pipeline ──────────────────────────
-  labelAtoms:
-    - name: "payment-api-agent"
+  # ── Agent protocol ────────────────────────────────────────────────────────
+  remotingSecurity:
+    enabled: true
 
+# ── Global tool configuration ─────────────────────────────────────────────────
 tool:
-  # ── JDK installations ────────────────────────────────────────────────────────
   jdk:
     installations:
       - name: "temurin-17"
@@ -43,8 +44,6 @@ tool:
               installers:
                 - adoptOpenJdkInstaller:
                     id: "jdk-17.0.12+7"
-
-  # ── Maven installations ──────────────────────────────────────────────────────
   maven:
     installations:
       - name: "maven-3.9"
@@ -54,22 +53,19 @@ tool:
                 - maven:
                     id: "3.9.9"
 
+# ── Pipeline job definition ───────────────────────────────────────────────────
 jobs:
-  # ── Multibranch Pipeline job ─────────────────────────────────────────────────
-  # Scans all branches and PRs; uses the Jenkinsfile at the repo root.
   - script: |
       multibranchPipelineJob('payment-api') {
         displayName('payment-api — CI/CD Pipeline')
-        description('Multibranch pipeline for payment-api. Triggered by GitHub webhooks.')
+        description('Declarative Jenkins pipeline for payment-api. Scans all branches for Jenkinsfile.')
 
         branchSources {
           github {
-            id('payment-api-github')
+            id('payment-api-source')
             repoOwner('philex1222')
             repository('payment-api')
             repositoryUrl('https://github.com/philex1222/payment-api.git')
-            // credentialsId matches the 'ghcr-credentials' Username/Password
-            // credential that also has repo:read scope for branch scanning
             credentialsId('ghcr-credentials')
           }
         }
@@ -87,7 +83,6 @@ jobs:
         }
 
         triggers {
-          // Periodic scan as a fallback when webhooks miss events
           periodicFolderTrigger {
             interval('1h')
           }
