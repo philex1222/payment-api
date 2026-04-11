@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "WebhookDeliveryResponse",
+  "description": "Single element in the array returned by GET /api/v1/webhooks/{id}/deliveries",
+  "type": "object",
+  "required": ["id", "subscriptionId", "paymentId", "eventType", "status", "attemptCount"],
+  "properties": {
+    "id":             { "type": "string", "minLength": 1 },
+    "subscriptionId": { "type": "string", "minLength": 1 },
+    "paymentId":      { "type": "string", "minLength": 1 },
+    "eventType":      {
+      "type": "string",
+      "enum": [
+        "PAYMENT_CREATED", "PAYMENT_COMPLETED", "PAYMENT_FAILED",
+        "PAYMENT_CANCELLED", "PAYMENT_REVERSED", "PAYMENT_REFUNDED",
+        "PAYMENT_STATUS_CHANGED"
+      ]
+    },
+    "status":         { "type": "string", "enum": ["PENDING", "DELIVERED", "FAILED"] },
+    "attemptCount":   { "type": "integer", "minimum": 0 },
+    "lastAttemptAt":  { "type": "string" },
+    "nextRetryAt":    { "type": "string" },
+    "responseStatus": { "type": "integer" },
+    "createdAt":      { "type": "string" }
+  },
+  "additionalProperties": false
+}

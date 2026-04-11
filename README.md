@@ -53,14 +53,14 @@ A production-grade RESTful microservice for payment processing built with Spring
 | Runtime | Java 17, Spring Boot 3.5.13 |
 | Security | Spring Security 6, jjwt 0.13.0 (HS512), BCrypt |
 | Persistence | Spring Data JPA, Hibernate, MySQL 8.4 (prod), H2 (local/test) |
-| Migrations | Flyway 10 (V1–V11) |
+| Migrations | Flyway 11 (V1–V11) |
 | Cache / Idempotency | Redis 7.4 (docker), Simple in-memory (local) |
 | Resilience | Resilience4j 2.4.0 — circuit breaker, retry, rate limiter, time limiter |
 | Metrics | Micrometer + Prometheus + Grafana |
 | Tracing | Micrometer Tracing + Brave + Zipkin |
 | Logging | Logback + Logstash encoder 8.1 |
 | Docs | SpringDoc OpenAPI 2.8.9 |
-| Testing | REST Assured 5.5.x, Cucumber-JVM 7.18, JUnit 5, Mockito |
+| Testing | REST Assured 5.5.x, Cucumber-JVM 7.22, JUnit 5, Mockito |
 | Build | Maven, JaCoCo 0.8.14 |
 | Container | Docker (multi-stage, layered JAR), docker-compose |
 | CI/CD | GitHub Actions (5-job CI + 3-job CD) |
@@ -359,6 +359,32 @@ Response headers: `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Res
 
 Configured via `CORS_ALLOWED_ORIGINS` environment variable. Applied to `/api/**` routes only. Pre-flight OPTIONS requests are handled by Spring Security's CorsFilter before the JWT filter.
 
+### Security & Vulnerability Management
+
+**Dependency scanning:**
+- `mvn org.owasp:dependency-check-maven:check` — NVD-based CVE scan. Run before every release.
+- CI gate: OWASP Dependency-Check blocks on CVSS ≥ 7.0 (job `owasp-check` in `ci.yml`).
+- Weekly automated scan via `security.yml` (all severities, HTML + SARIF reports uploaded to GitHub Security tab).
+
+**Container scanning:**
+- Trivy scans the Docker image for CRITICAL/HIGH fixable CVEs after every build (job `docker-scan` in `ci.yml`).
+- `trivy image --severity CRITICAL,HIGH --ignore-unfixed payment-api:latest`
+
+**Dependency version constraints (pinned with justification):**
+
+| Dependency | Version | Constraint reason |
+|---|---|---|
+| `springdoc-openapi` | 2.8.9 | DO NOT upgrade to 2.8.10-2.8.16 — `PatternParseException` regression |
+| `logstash-logback-encoder` | 8.x | DO NOT upgrade to 9.0 — requires Jackson 3, incompatible with Spring Boot 3.5.x |
+| `cucumber-*` | 7.22.1 | DO NOT upgrade beyond 7.22.x — Cucumber 7.23+ requires JUnit Platform 1.13 (`DiscoveryIssueReporter`); Spring Boot 3.5.x BOM ships JUnit Platform 1.12.x |
+| `spring-boot` | 3.5.x | DO NOT upgrade to 4.x milestone builds — they are not GA |
+
+**CVE remediation process:**
+1. Trivy or OWASP gate fails in CI with a specific CVE ID.
+2. Update the affected dependency to the patched version in `pom.xml` (prefer BOM property override over explicit version).
+3. If no patch is available and `ignore-unfixed=true` does not suppress it, document the suppression in `dependency-check-suppression.xml` with a tracked issue link.
+4. Re-run `mvn verify` locally before pushing.
+
 ---
 
 ## Configuration Reference
@@ -412,16 +438,16 @@ open target/site/jacoco/index.html
 open target/cucumber-reports/cucumber.html
 ```
 
-**478 tests** across 25 test classes:
+**539 tests** across 26 test classes:
 
 | Layer | Count | Framework | What it covers |
 |---|---|---|---|
 | Unit | ~320 | JUnit 5 + Mockito | Services, DTOs, filters, security, metrics, scheduler |
-| Controller slice | ~60 | `@WebMvcTest` + MockMvc | Auth, payment, admin controllers; validation, error mapping |
+| Controller slice | ~60 | `@WebMvcTest` + MockMvc | Auth, payment, admin, webhook controllers; validation, error mapping |
 | Integration | ~15 | `@SpringBootTest` + H2 | Full Spring context; DB constraints, caching, tracing |
 | End-to-end | ~15 | `TestRestTemplate` | HTTP round-trips, ownership isolation |
-| System (RestAssured) | ~57 | REST Assured 5.5.x | JSON Schema validation, SLA, RBAC, masking, idempotency |
-| BDD acceptance | 25 | **Cucumber-JVM 7.18** | Business narrative scenarios in Gherkin |
+| System (RestAssured) | ~87 | REST Assured 5.5.x | JSON Schema validation, SLA, RBAC, masking, idempotency, webhooks |
+| BDD acceptance | 25 | **Cucumber-JVM 7.22** | Business narrative scenarios in Gherkin |
 
 ### REST Assured system tests
 
@@ -429,14 +455,16 @@ The project uses [REST Assured](https://rest-assured.io/) 5.5.x for API-level sy
 
 - **JSON Schema validation** — responses validated against schemas in `src/test/resources/schemas/`
   - `payment-response.json`, `error-response.json`, `login-response.json`, `admin-stats.json`, `user-profile-response.json`
-- **Coverage** — auth login/logout/me/register/change-password, full payment CRUD lifecycle, reversal, cancellation, idempotency, filtering, pagination, admin operations, OpenAPI spec
-- **Security verification** — headers (CSP, X-Frame-Options, Permissions-Policy, HSTS), RBAC, BOLA ownership, account masking, rejected password not echoed
+  - `webhook-subscription-response.json`, `webhook-delivery-response.json`
+- **Coverage** — auth login/logout/me/register/change-password, full payment CRUD lifecycle, reversal, cancellation, idempotency, filtering, pagination, admin operations, full webhook CRUD, SSRF validation, delivery history, OpenAPI spec
+- **Security verification** — headers (CSP, X-Frame-Options, Permissions-Policy), RBAC, BOLA ownership, account masking, rejected password not echoed, webhook bearer-token masking
 - **Response time SLA** — payment creation < 3s, list < 2s, health < 1s
 - **Full HTTP stack** — hits the real embedded Tomcat, exercising the complete filter chain
+- **Two test classes** — `PaymentApiRestAssuredTest` (payments/auth/admin) and `WebhookApiRestAssuredTest` (webhooks)
 
 ### Cucumber-JVM BDD acceptance tests
 
-The project uses [Cucumber 7.18](https://cucumber.io/) with JUnit 5 for business-readable acceptance tests:
+The project uses [Cucumber 7.22](https://cucumber.io/) with JUnit 5 for business-readable acceptance tests:
 
 ```
 src/test/resources/features/
@@ -638,6 +666,8 @@ Flyway manages the schema (`src/main/resources/db/migration/`):
 | V7 | `performed_by` column on `audit_logs` for actor tracking |
 | V8 | `created_at` and `updated_at` timestamps on `transactions` |
 | V9 | `created_at` timestamp on `users` (exposed via `UserProfileResponse`) |
+| V10 | `webhook_subscriptions` table |
+| V11 | `webhook_deliveries` table |
 
 Flyway runs automatically on startup in the `docker` profile. The `local` and `test` profiles use Hibernate `ddl-auto=create-drop` with H2 instead.
 
@@ -649,7 +679,7 @@ Flyway runs automatically on startup in the `docker` profile. The `local` and `t
 payment-api/
   src/main/java/com/example/paymentapi/
     config/          # SecurityConfig, WebMvcConfig, RateLimitInterceptor, AccessLogFilter
-    controller/      # AuthController, PaymentController, AdminController
+    controller/      # AuthController, PaymentController, AdminController, WebhookController
     dto/             # Request/response DTOs with validation annotations
     exception/       # Custom exceptions + global PaymentExceptionHandler
     metrics/         # PaymentMetrics (Micrometer counters and timers)
@@ -662,13 +692,13 @@ payment-api/
     application-local.properties     # H2, no Redis, debug logging
     application-docker.properties    # MySQL, Redis, JSON logging
     application-test.properties      # Test-specific overrides
-    db/migration/                    # Flyway SQL migrations (V1–V9)
+    db/migration/                    # Flyway SQL migrations (V1–V11)
     logback-spring.xml               # Structured logging config
   src/test/
     java/.../bdd/                    # Cucumber-JVM infrastructure (CucumberIT, ScenarioContext, step defs)
-    resources/features/              # Gherkin feature files (auth, registration, payments)
+    resources/features/              # Gherkin feature files (auth, registration, payments, webhooks)
     resources/schemas/               # JSON Schema files for REST Assured response validation
-    # 478 tests total (unit, controller, integration, E2E, REST Assured, Cucumber BDD)
+    # 539 tests total (unit, controller, integration, E2E, REST Assured, Cucumber BDD)
   .github/workflows/                 # CI, CD, security scan, Claude Code workflows
   helm/payment-api/                  # Helm chart for Kubernetes deployment
   Dockerfile                         # Multi-stage layered JAR build

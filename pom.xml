@@ -18,7 +18,14 @@
         <java.version>17</java.version>
         <jjwt.version>0.13.0</jjwt.version>
         <springdoc.version>2.8.9</springdoc.version>
-        <cucumber.version>7.18.1</cucumber.version>
+        <!--
+          Cucumber 7.22.1 is the latest version compatible with JUnit Platform 1.12.x
+          (shipped by Spring Boot 3.5.x BOM). Cucumber 7.23+ bumped junit-bom to 5.13+
+          (JUnit Platform 1.13), which introduces DiscoveryIssueReporter — a class not
+          present in 1.12.x, causing a NoClassDefFoundError at test discovery time.
+          Do NOT upgrade beyond 7.22.1 until Spring Boot upgrades JUnit Platform to 1.13+.
+        -->
+        <cucumber.version>7.22.1</cucumber.version>
         <resilience4j.version>2.4.0</resilience4j.version>
         <!--
           Pin Tomcat to the version shipped by the Spring Boot 3.5.13 BOM (10.1.53),
@@ -33,6 +40,18 @@
           the intended version immediately visible in pom.xml.
         -->
         <tomcat.version>10.1.53</tomcat.version>
+        <!--
+          Override Flyway within the 11.x line (Spring Boot BOM ships 11.7.2).
+          11.8.x and 11.9.x are minor bug-fix releases with no breaking API changes.
+          Flyway 12.x is a major version and requires separate assessment before adoption.
+        -->
+        <flyway.version>11.9.2</flyway.version>
+        <!--
+          Override httpclient5 ahead of the Spring Boot BOM (ships 5.5.2).
+          5.6 is the latest GA release with connection-pool and TLS improvements.
+          Same major version — API-compatible.
+        -->
+        <httpclient5.version>5.6</httpclient5.version>
     </properties>
 
     <dependencyManagement>

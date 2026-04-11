@@ -19,8 +19,9 @@ import org.springframework.transaction.support.TransactionTemplate;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
@@ -53,7 +54,7 @@ class WebhookEventListenerTest {
     }
 
     @Test
-    void handlePaymentEvent_createsDeliveryForMatchingSubscription() throws InterruptedException {
+    void handlePaymentEvent_createsDeliveryForMatchingSubscription() {
         transactionTemplate.executeWithoutResult(status -> {
             WebhookSubscriptionRequest req = WebhookSubscriptionRequest.builder()
                     .targetUrl("http://example.com/hook")
@@ -71,8 +72,9 @@ class WebhookEventListenerTest {
             webhookEventListener.handlePaymentEvent(event);
         });
 
-        // Wait for async operation to complete
-        Thread.sleep(500);
+        // Awaitility polls until the async listener has persisted the delivery row
+        await().atMost(3, SECONDS).pollInterval(50, MILLISECONDS)
+                .until(() -> deliveryRepository.findAll().size() == 1);
 
         var deliveries = deliveryRepository.findAll();
         assertThat(deliveries).hasSize(1);
@@ -121,7 +123,7 @@ class WebhookEventListenerTest {
     }
 
     @Test
-    void handlePaymentEvent_statusChangedCatchAll_matchesAnyStatusEvent() throws InterruptedException {
+    void handlePaymentEvent_statusChangedCatchAll_matchesAnyStatusEvent() {
         transactionTemplate.executeWithoutResult(status -> {
             WebhookSubscriptionRequest req = WebhookSubscriptionRequest.builder()
                     .targetUrl("http://example.com/hook")
@@ -136,14 +138,14 @@ class WebhookEventListenerTest {
             webhookEventListener.handlePaymentEvent(event);
         });
 
-        // Wait for async operation to complete
-        Thread.sleep(500);
+        await().atMost(3, SECONDS).pollInterval(50, MILLISECONDS)
+                .until(() -> deliveryRepository.findAll().size() == 1);
 
         assertThat(deliveryRepository.findAll()).hasSize(1);
     }
 
     @Test
-    void handlePaymentEvent_adminScope_receivesOtherUsersEvents() throws InterruptedException {
+    void handlePaymentEvent_adminScope_receivesOtherUsersEvents() {
         transactionTemplate.executeWithoutResult(status -> {
             WebhookSubscriptionRequest req = WebhookSubscriptionRequest.builder()
                     .targetUrl("http://example.com/hook")
@@ -159,8 +161,8 @@ class WebhookEventListenerTest {
             webhookEventListener.handlePaymentEvent(event);
         });
 
-        // Wait for async operation to complete
-        Thread.sleep(500);
+        await().atMost(3, SECONDS).pollInterval(50, MILLISECONDS)
+                .until(() -> deliveryRepository.findAll().size() == 1);
 
         assertThat(deliveryRepository.findAll()).hasSize(1);
     }

@@ -1,0 +1,29 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "WebhookSubscriptionResponse",
+  "description": "Response returned by POST /api/v1/webhooks and GET /api/v1/webhooks/{id}",
+  "type": "object",
+  "required": ["id", "userId", "targetUrl", "bearerToken", "eventTypes", "adminScope", "active"],
+  "properties": {
+    "id":           { "type": "string", "minLength": 1 },
+    "userId":       { "type": "integer", "minimum": 1 },
+    "targetUrl":    { "type": "string", "minLength": 1 },
+    "bearerToken":  { "type": "string", "const": "***" },
+    "eventTypes":   {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "PAYMENT_CREATED", "PAYMENT_COMPLETED", "PAYMENT_FAILED",
+          "PAYMENT_CANCELLED", "PAYMENT_REVERSED", "PAYMENT_REFUNDED",
+          "PAYMENT_STATUS_CHANGED"
+        ]
+      },
+      "minItems": 1
+    },
+    "adminScope":   { "type": "boolean" },
+    "active":       { "type": "boolean" },
+    "createdAt":    { "type": "string" }
+  },
+  "additionalProperties": false
+}
