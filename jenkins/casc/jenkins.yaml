@@ -1,0 +1,95 @@
+# =============================================================================
+# Jenkins Configuration as Code (JCasC)
+#
+# Apply this file to a fresh Jenkins instance to pre-configure:
+#   - Global tool installations (JDK 17, Maven 3.9)
+#   - Pipeline job pointing to this repository
+#   - Multibranch pipeline scan configuration
+#
+# Usage:
+#   1. Install the "Configuration as Code" Jenkins plugin.
+#   2. Go to Manage Jenkins → Configuration as Code → Reload existing configuration.
+#      OR set CASC_JENKINS_CONFIG=/path/to/jenkins.yaml before starting Jenkins.
+#
+# NOTE: Credentials (GHCR PAT, kubeconfig files, NVD API key) must be added
+#       manually via Manage Jenkins → Credentials, or injected via a secrets
+#       manager (HashiCorp Vault, AWS Secrets Manager, etc.).
+# =============================================================================
+
+jenkins:
+  systemMessage: "payment-api CI/CD — managed by Configuration as Code"
+  numExecutors: 0   # Controller runs no jobs; all work goes to agents
+
+  # ── Security realm (basic local accounts — replace with LDAP/OIDC in prod) ──
+  securityRealm:
+    local:
+      allowsSignup: false
+
+  authorizationStrategy:
+    loggedInUsersCanDoAnything:
+      allowAnonymousRead: false
+
+  # ── Global agent label for the payment-api pipeline ──────────────────────────
+  labelAtoms:
+    - name: "payment-api-agent"
+
+tool:
+  # ── JDK installations ────────────────────────────────────────────────────────
+  jdk:
+    installations:
+      - name: "temurin-17"
+        properties:
+          - installSource:
+              installers:
+                - adoptOpenJdkInstaller:
+                    id: "jdk-17.0.12+7"
+
+  # ── Maven installations ──────────────────────────────────────────────────────
+  maven:
+    installations:
+      - name: "maven-3.9"
+        properties:
+          - installSource:
+              installers:
+                - maven:
+                    id: "3.9.9"
+
+jobs:
+  # ── Multibranch Pipeline job ─────────────────────────────────────────────────
+  # Scans all branches and PRs; uses the Jenkinsfile at the repo root.
+  - script: |
+      multibranchPipelineJob('payment-api') {
+        displayName('payment-api — CI/CD Pipeline')
+        description('Multibranch pipeline for payment-api. Triggered by GitHub webhooks.')
+
+        branchSources {
+          github {
+            id('payment-api-github')
+            repoOwner('philex1222')
+            repository('payment-api')
+            repositoryUrl('https://github.com/philex1222/payment-api.git')
+            // credentialsId matches the 'ghcr-credentials' Username/Password
+            // credential that also has repo:read scope for branch scanning
+            credentialsId('ghcr-credentials')
+          }
+        }
+
+        factory {
+          workflowBranchProjectFactory {
+            scriptPath('Jenkinsfile')
+          }
+        }
+
+        orphanedItemStrategy {
+          discardOldItems {
+            numToKeep(10)
+          }
+        }
+
+        triggers {
+          // Periodic scan as a fallback when webhooks miss events
+          periodicFolderTrigger {
+            interval('1h')
+          }
+        }
+      }
