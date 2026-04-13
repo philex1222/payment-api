@@ -36,9 +36,9 @@ public class WebhookDelivery {
     @Column(nullable = false, columnDefinition = "TEXT")
     private String payload;
 
-    /** PENDING, DELIVERED, or FAILED. */
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
-    private String status;
+    private WebhookDeliveryStatus status;
 
     @Column(name = "attempt_count", nullable = false)
     private int attemptCount = 0;

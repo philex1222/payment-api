@@ -1,6 +1,7 @@
 package com.example.paymentapi.repository;
 
 import com.example.paymentapi.model.WebhookDelivery;
+import com.example.paymentapi.model.WebhookDeliveryStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -13,11 +14,12 @@ import java.util.List;
 public interface WebhookDeliveryRepository extends JpaRepository<WebhookDelivery, String> {
 
     @Query("SELECT d FROM WebhookDelivery d " +
-           "WHERE d.status = 'PENDING' " +
+           "WHERE d.status = :status " +
            "AND d.nextRetryAt <= :now " +
            "AND d.attemptCount < :maxAttempts " +
            "ORDER BY d.nextRetryAt ASC")
     List<WebhookDelivery> findPendingDeliveries(
+            @Param("status") WebhookDeliveryStatus status,
             @Param("now") LocalDateTime now,
             @Param("maxAttempts") int maxAttempts);
 

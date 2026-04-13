@@ -1,6 +1,7 @@
 package com.example.paymentapi.service;
 
 import com.example.paymentapi.model.WebhookDelivery;
+import com.example.paymentapi.model.WebhookDeliveryStatus;
 import com.example.paymentapi.repository.WebhookDeliveryRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -35,7 +36,7 @@ public class WebhookDispatcherService {
     @Scheduled(fixedDelayString = "${webhook.dispatcher.fixed-delay-ms:30000}")
     public void dispatchPendingDeliveries() {
         List<WebhookDelivery> pending = deliveryRepository.findPendingDeliveries(
-                LocalDateTime.now(), WebhookDeliveryExecutor.MAX_ATTEMPTS);
+                WebhookDeliveryStatus.PENDING, LocalDateTime.now(), WebhookDeliveryExecutor.MAX_ATTEMPTS);
         if (pending.isEmpty()) return;
         logger.debug("Dispatching {} pending webhook deliveries", pending.size());
         for (WebhookDelivery delivery : pending) {

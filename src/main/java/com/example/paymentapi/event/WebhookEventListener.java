@@ -2,6 +2,7 @@ package com.example.paymentapi.event;
 
 import com.example.paymentapi.dto.WebhookDeliveryPayload;
 import com.example.paymentapi.model.WebhookDelivery;
+import com.example.paymentapi.model.WebhookDeliveryStatus;
 import com.example.paymentapi.model.WebhookEventType;
 import com.example.paymentapi.model.WebhookSubscription;
 import com.example.paymentapi.repository.UserRepository;
@@ -77,7 +78,7 @@ public class WebhookEventListener {
             delivery.setPaymentId(paymentId);
             delivery.setEventType(eventTypeName);
             delivery.setPayload(payloadJson);
-            delivery.setStatus("PENDING");
+            delivery.setStatus(WebhookDeliveryStatus.PENDING);
             delivery.setAttemptCount(0);
             delivery.setNextRetryAt(LocalDateTime.now());
             deliveryRepository.save(delivery);

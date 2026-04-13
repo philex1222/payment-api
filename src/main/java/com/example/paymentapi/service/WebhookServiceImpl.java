@@ -221,7 +221,7 @@ public class WebhookServiceImpl implements WebhookService {
                 .subscriptionId(d.getSubscriptionId())
                 .paymentId(d.getPaymentId())
                 .eventType(d.getEventType())
-                .status(d.getStatus())
+                .status(d.getStatus() != null ? d.getStatus().name() : null)
                 .attemptCount(d.getAttemptCount())
                 .lastAttemptAt(d.getLastAttemptAt())
                 .nextRetryAt(d.getNextRetryAt())
