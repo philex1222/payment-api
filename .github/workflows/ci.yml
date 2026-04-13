@@ -92,7 +92,7 @@ jobs:
           fail-on-error: "false"
 
       - name: Upload JaCoCo HTML coverage report
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: always()
         with:
           name: jacoco-report
@@ -100,7 +100,7 @@ jobs:
           retention-days: 14
 
       - name: Upload application JAR
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: payment-api-jar
           path: target/payment-api-*.jar
@@ -212,7 +212,7 @@ jobs:
           fi
 
       - name: Upload Trivy filesystem SARIF as artifact
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: always()
         with:
           name: trivy-fs-sarif
@@ -279,7 +279,7 @@ jobs:
           fi
 
       - name: Upload Trivy SARIF as artifact
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: always()
         with:
           name: trivy-sarif
@@ -353,7 +353,7 @@ jobs:
           category: owasp-dependency-check
 
       - name: Upload full OWASP HTML/SARIF report as artifact
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: always()
         with:
           name: owasp-report
