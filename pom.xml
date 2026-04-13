@@ -17,7 +17,7 @@
     <properties>
         <java.version>17</java.version>
         <jjwt.version>0.13.0</jjwt.version>
-        <springdoc.version>2.8.9</springdoc.version>
+        <springdoc.version>2.8.17</springdoc.version>
         <!--
           Cucumber 7.22.1 is the latest version compatible with JUnit Platform 1.12.x
           (shipped by Spring Boot 3.5.x BOM). Cucumber 7.23+ bumped junit-bom to 5.13+
