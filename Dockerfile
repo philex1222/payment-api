@@ -11,7 +11,7 @@
 # =============================================================================
 
 # ── Stage 1: Build ────────────────────────────────────────────────────────────
-FROM maven:3.9-eclipse-temurin-17-alpine AS build
+FROM maven:3.9-eclipse-temurin-21-alpine AS build
 WORKDIR /app
 
 # Copy POM first so dependency layer is cached until pom.xml changes
@@ -24,14 +24,14 @@ RUN mvn package --batch-mode --no-transfer-progress -DskipTests -q
 # ── Stage 2: Extract layers ───────────────────────────────────────────────────
 # Using jammy (Ubuntu 22.04) — ships OpenSSL 3.0.x which is NOT affected by the
 # OpenSSL 3.5/3.6 CVEs present in Alpine 3.22's OpenSSL 3.5.x package.
-FROM eclipse-temurin:17-jre-jammy AS layers
+FROM eclipse-temurin:21-jre-jammy AS layers
 WORKDIR /app
 COPY --from=build /app/target/*.jar app.jar
 # Spring Boot 3's layertools extracts the JAR into well-separated directories
 RUN java -Djarmode=layertools -jar app.jar extract
 
 # ── Stage 3: Runtime ──────────────────────────────────────────────────────────
-FROM eclipse-temurin:17-jre-jammy
+FROM eclipse-temurin:21-jre-jammy
 WORKDIR /app
 
 # Upgrade all packages to apply latest security patches before locking down to
