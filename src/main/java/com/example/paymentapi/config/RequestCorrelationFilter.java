@@ -35,6 +35,13 @@ public class RequestCorrelationFilter extends OncePerRequestFilter {
         String correlationId = request.getHeader(CORRELATION_ID_HEADER);
         if (correlationId == null || correlationId.isBlank()) {
             correlationId = UUID.randomUUID().toString();
+        } else {
+            // Strip CR, LF, tab and all other control characters to prevent log injection.
+            // Cap at 64 characters; re-generate a UUID if the result is blank or oversized.
+            correlationId = correlationId.replaceAll("[\\r\\n\\t\\x00-\\x1f\\x7f]", "").strip();
+            if (correlationId.isBlank() || correlationId.length() > 64) {
+                correlationId = UUID.randomUUID().toString();
+            }
         }
 
         MDC.put(MDC_KEY, correlationId);

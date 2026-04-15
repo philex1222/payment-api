@@ -18,7 +18,7 @@
 //   nvd-api-key              : Secret text        — NVD API key (optional, speeds OWASP)
 //
 // Required Jenkins tools (Manage Jenkins → Global Tool Configuration):
-//   JDK   : name "temurin-17"   — Eclipse Temurin 17
+//   JDK   : name "temurin-21"   — Eclipse Temurin 21
 //   Maven : name "maven-3.9"    — Apache Maven 3.9.x
 // =============================================================================
 

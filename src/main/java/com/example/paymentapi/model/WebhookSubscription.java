@@ -1,5 +1,6 @@
 package com.example.paymentapi.model;
 
+import com.example.paymentapi.config.AesGcmAttributeConverter;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -29,7 +30,8 @@ public class WebhookSubscription {
     @Column(name = "target_url", nullable = false, length = 512)
     private String targetUrl;
 
-    @Column(name = "bearer_token", nullable = false, length = 512)
+    @Convert(converter = AesGcmAttributeConverter.class)
+    @Column(name = "bearer_token", nullable = false, length = 1024)
     private String bearerToken;
 
     /** Comma-separated WebhookEventType names, e.g. "PAYMENT_CREATED,PAYMENT_FAILED" */

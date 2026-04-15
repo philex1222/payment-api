@@ -4,10 +4,15 @@ import com.example.paymentapi.bdd.ScenarioContext;
 import io.cucumber.java.en.*;
 import io.restassured.http.ContentType;
 import io.restassured.response.Response;
+import org.awaitility.core.ConditionTimeoutException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 
+import java.util.List;
+import java.util.concurrent.TimeUnit;
+
 import static io.restassured.RestAssured.given;
+import static org.awaitility.Awaitility.await;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
 
@@ -168,8 +173,33 @@ public class WebhookSteps {
     // ── Delivery assertions ─────────────────────────────────────────────────────
 
     @And("I wait {int}ms for async processing")
-    public void waitForAsync(int millis) throws InterruptedException {
-        Thread.sleep(millis);
+    public void waitForAsync(int millis) {
+        // Poll until a delivery row appears, exiting early when it does.
+        // ConditionTimeoutException is swallowed for scenarios that assert zero deliveries —
+        // timing out is the correct outcome when no delivery should be created.
+        try {
+            await().atMost(millis, TimeUnit.MILLISECONDS)
+                   .pollInterval(50, TimeUnit.MILLISECONDS)
+                   .until(this::hasAnyDelivery);
+        } catch (ConditionTimeoutException ignored) {
+            // Expected in scenarios asserting zero deliveries
+        }
+    }
+
+    private boolean hasAnyDelivery() {
+        if (ctx.getWebhookSubscriptionId() == null) return false;
+        String adminToken = given()
+                .contentType(ContentType.JSON)
+                .body("{\"username\":\"admin\",\"password\":\"password\"}")
+            .when()
+                .post("/api/v1/auth/login")
+            .then().statusCode(200).extract().path("token");
+        List<?> deliveries = given()
+                .header("Authorization", "Bearer " + adminToken)
+            .when()
+                .get("/api/v1/webhooks/" + ctx.getWebhookSubscriptionId() + "/deliveries")
+            .then().statusCode(200).extract().path("");
+        return deliveries != null && !deliveries.isEmpty();
     }
 
     @Then("the webhook subscription has at least {int} pending or delivered delivery")

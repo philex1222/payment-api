@@ -2,6 +2,7 @@ package com.example.paymentapi.service;
 
 import com.example.paymentapi.config.TestConfig;
 import com.example.paymentapi.model.WebhookDelivery;
+import com.example.paymentapi.model.WebhookDeliveryStatus;
 import com.example.paymentapi.model.WebhookSubscription;
 import com.example.paymentapi.repository.WebhookDeliveryRepository;
 import com.example.paymentapi.repository.WebhookSubscriptionRepository;
@@ -55,7 +56,7 @@ class WebhookDispatcherServiceTest {
         d.setPaymentId("pay-001");
         d.setEventType("PAYMENT_COMPLETED");
         d.setPayload("{\"eventType\":\"PAYMENT_COMPLETED\"}");
-        d.setStatus("PENDING");
+        d.setStatus(WebhookDeliveryStatus.PENDING);
         d.setAttemptCount(0);
         d.setNextRetryAt(LocalDateTime.now().minusSeconds(1));
         return deliveryRepository.save(d);
@@ -91,7 +92,7 @@ class WebhookDispatcherServiceTest {
         dispatcherService.dispatchPendingDeliveries();
 
         WebhookDelivery updated = deliveryRepository.findById(delivery.getId()).orElseThrow();
-        assertThat(updated.getStatus()).isEqualTo("DELIVERED");
+        assertThat(updated.getStatus()).isEqualTo(WebhookDeliveryStatus.DELIVERED);
         assertThat(updated.getAttemptCount()).isEqualTo(1);
         assertThat(updated.getLastAttemptAt()).isNotNull();
     }
@@ -104,7 +105,7 @@ class WebhookDispatcherServiceTest {
         dispatcherService.dispatchPendingDeliveries();
 
         WebhookDelivery updated = deliveryRepository.findById(delivery.getId()).orElseThrow();
-        assertThat(updated.getStatus()).isEqualTo("PENDING");
+        assertThat(updated.getStatus()).isEqualTo(WebhookDeliveryStatus.PENDING);
         assertThat(updated.getAttemptCount()).isEqualTo(1);
         assertThat(updated.getNextRetryAt()).isAfter(LocalDateTime.now());
     }
@@ -119,7 +120,7 @@ class WebhookDispatcherServiceTest {
         dispatcherService.dispatchPendingDeliveries();
 
         WebhookDelivery updated = deliveryRepository.findById(delivery.getId()).orElseThrow();
-        assertThat(updated.getStatus()).isEqualTo("FAILED");
+        assertThat(updated.getStatus()).isEqualTo(WebhookDeliveryStatus.FAILED);
         assertThat(updated.getAttemptCount()).isEqualTo(5);
     }
 
@@ -133,7 +134,7 @@ class WebhookDispatcherServiceTest {
         dispatcherService.dispatchPendingDeliveries();
 
         WebhookDelivery unchanged = deliveryRepository.findById(delivery.getId()).orElseThrow();
-        assertThat(unchanged.getStatus()).isEqualTo("PENDING");
+        assertThat(unchanged.getStatus()).isEqualTo(WebhookDeliveryStatus.PENDING);
         assertThat(unchanged.getAttemptCount()).isEqualTo(0);
     }
 }

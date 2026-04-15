@@ -3,6 +3,7 @@ package com.example.paymentapi.event;
 import com.example.paymentapi.config.TestConfig;
 import com.example.paymentapi.dto.PaymentResponse;
 import com.example.paymentapi.dto.WebhookSubscriptionRequest;
+import com.example.paymentapi.model.WebhookDeliveryStatus;
 import com.example.paymentapi.model.WebhookEventType;
 import com.example.paymentapi.repository.WebhookDeliveryRepository;
 import com.example.paymentapi.service.WebhookService;
@@ -78,7 +79,7 @@ class WebhookEventListenerTest {
 
         var deliveries = deliveryRepository.findAll();
         assertThat(deliveries).hasSize(1);
-        assertThat(deliveries.get(0).getStatus()).isEqualTo("PENDING");
+        assertThat(deliveries.get(0).getStatus()).isEqualTo(WebhookDeliveryStatus.PENDING);
         assertThat(deliveries.get(0).getEventType()).isEqualTo("PAYMENT_COMPLETED");
         assertThat(deliveries.get(0).getPaymentId()).isEqualTo("pay-001");
     }

@@ -1,6 +1,7 @@
 package com.example.paymentapi.service;
 
 import com.example.paymentapi.model.WebhookDelivery;
+import com.example.paymentapi.model.WebhookDeliveryStatus;
 import com.example.paymentapi.model.WebhookSubscription;
 import com.example.paymentapi.repository.WebhookDeliveryRepository;
 import com.example.paymentapi.repository.WebhookSubscriptionRepository;
@@ -47,7 +48,7 @@ public class WebhookDeliveryExecutor {
     public void dispatchSingle(WebhookDelivery delivery) {
         WebhookSubscription sub = subscriptionRepository.findById(delivery.getSubscriptionId()).orElse(null);
         if (sub == null) {
-            delivery.setStatus("FAILED");
+            delivery.setStatus(WebhookDeliveryStatus.FAILED);
             deliveryRepository.save(delivery);
             return;
         }
@@ -59,11 +60,11 @@ public class WebhookDeliveryExecutor {
         delivery.setResponseStatus(httpStatus == 0 ? null : httpStatus);
 
         if (httpStatus >= 200 && httpStatus < 300) {
-            delivery.setStatus("DELIVERED");
+            delivery.setStatus(WebhookDeliveryStatus.DELIVERED);
             logger.info("Webhook delivery {} DELIVERED to {}", delivery.getId(), sub.getTargetUrl());
         } else {
             if (delivery.getAttemptCount() >= MAX_ATTEMPTS) {
-                delivery.setStatus("FAILED");
+                delivery.setStatus(WebhookDeliveryStatus.FAILED);
                 logger.warn("Webhook delivery {} permanently FAILED after {} attempts", delivery.getId(), MAX_ATTEMPTS);
             } else {
                 long backoffSeconds = BASE_BACKOFF_SECONDS * (1L << delivery.getAttemptCount());
