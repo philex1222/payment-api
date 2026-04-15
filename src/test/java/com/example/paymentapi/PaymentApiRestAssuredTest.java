@@ -456,7 +456,8 @@ class PaymentApiRestAssuredTest {
                 .statusCode(200)
                 .body("content", hasSize(greaterThanOrEqualTo(1)))
                 .body("content[0].id", notNullValue())
-                .body("totalElements", greaterThanOrEqualTo(1));
+                // VIA_DTO page serialization: top-level pagination fields moved to "page" object
+                .body("page.totalElements", greaterThanOrEqualTo(1));
         }
 
         @Test
@@ -896,9 +897,10 @@ class PaymentApiRestAssuredTest {
             .then()
                 .statusCode(200)
                 .body("content", hasSize(2))
-                .body("number", equalTo(0))
-                .body("size", equalTo(2))
-                .body("totalElements", greaterThanOrEqualTo(3));
+                // VIA_DTO page serialization: pagination fields are nested under "page" object
+                .body("page.number", equalTo(0))
+                .body("page.size", equalTo(2))
+                .body("page.totalElements", greaterThanOrEqualTo(3));
         }
 
         @Test

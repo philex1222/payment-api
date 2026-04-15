@@ -16,6 +16,7 @@ import org.springframework.cache.CacheManager;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.TestPropertySource;
 
 import static io.restassured.RestAssured.given;
 import static io.restassured.module.jsv.JsonSchemaValidator.matchesJsonSchemaInClasspath;
@@ -36,6 +37,8 @@ import static org.hamcrest.Matchers.*;
 @ActiveProfiles("test")
 @Import(TestConfig.class)
 @DisplayName("Webhook API — REST Assured System Tests")
+// Override the test-profile SSRF bypass so SSRF security tests execute as they would in production.
+@TestPropertySource(properties = "webhook.ssrf.allow-localhost=false")
 class WebhookApiRestAssuredTest {
 
     @LocalServerPort

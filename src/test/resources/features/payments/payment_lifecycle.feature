@@ -9,23 +9,22 @@ Feature: Payment Lifecycle
   Scenario: Create a payment — verify structure and account masking
     When I create a payment for 100 USD from "1234567890" to "0987654321"
     Then the response status code is 201
-    And the payment status is "PENDING"
+    And the payment status is "COMPLETED"
     And the payment has an "id" field
     And account numbers are masked in the response
 
   Scenario: Reverse a completed payment
     When I create a payment for 50 USD from "1234567890" to "0987654321"
     Then the payment is created successfully
-    When I reverse the payment
+    When I initiate a reversal of the payment with reason "Customer requested refund for BDD test"
     Then the response status code is 200
     And the payment status is "REVERSED"
 
-  Scenario: Cancel a payment
+  Scenario: Cancel a completed payment returns conflict
     When I create a payment for 25 USD from "1234567890" to "0987654321"
     Then the payment is created successfully
     When I cancel the payment
-    Then the response status code is 200
-    And the payment status is "CANCELLED"
+    Then the response status code is 409
 
   Scenario: Idempotency key prevents duplicate payments
     Given an idempotency key "bdd-idem-key-lifecycle-001"

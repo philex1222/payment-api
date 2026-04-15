@@ -33,6 +33,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
@@ -271,6 +272,7 @@ public class PaymentServiceTest {
         }
 
         @Test
+        @SuppressWarnings("unchecked") // Specification<Payment> raw type required by Mockito any() matcher
         @DisplayName("Should return paginated payments")
         void testGetPayments_Paginated() {
             List<Payment> payments = Arrays.asList(
@@ -280,7 +282,7 @@ public class PaymentServiceTest {
             Page<Payment> page = new PageImpl<>(payments);
             Pageable pageable = PageRequest.of(0, 10);
 
-            when(paymentRepository.findAll(any(org.springframework.data.jpa.domain.Specification.class), eq(pageable)))
+            when(paymentRepository.findAll(any(Specification.class), eq(pageable)))
                     .thenReturn(page);
 
             Page<PaymentResponse> result = paymentService.getPayments(null, null, null, null, null, null, pageable);
@@ -290,12 +292,13 @@ public class PaymentServiceTest {
         }
 
         @Test
+        @SuppressWarnings("unchecked") // Specification<Payment> raw type required by Mockito any() matcher
         @DisplayName("Should return empty page when no payments")
         void testGetPayments_Empty() {
             Page<Payment> emptyPage = new PageImpl<>(Collections.emptyList());
             Pageable pageable = PageRequest.of(0, 10);
 
-            when(paymentRepository.findAll(any(org.springframework.data.jpa.domain.Specification.class), eq(pageable)))
+            when(paymentRepository.findAll(any(Specification.class), eq(pageable)))
                     .thenReturn(emptyPage);
 
             Page<PaymentResponse> result = paymentService.getPayments(null, null, null, null, null, null, pageable);

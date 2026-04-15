@@ -13,6 +13,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.example.paymentapi.exception.WebhookSubscriptionNotFoundException;
@@ -24,6 +25,8 @@ import static org.assertj.core.api.Assertions.*;
 @ActiveProfiles("test")
 @Import(TestConfig.class)
 @Transactional
+// Override the test-profile SSRF bypass so SSRF security tests execute as they would in production.
+@TestPropertySource(properties = "webhook.ssrf.allow-localhost=false")
 class WebhookServiceImplTest {
 
     @Autowired private WebhookService webhookService;

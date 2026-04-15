@@ -730,7 +730,8 @@ public class PaymentSystemTest {
                     .andExpect(status().isOk())
                     .andReturn().getResponse().getContentAsString();
 
-            int totalElements = objectMapper.readTree(json).get("totalElements").asInt();
+            // VIA_DTO page serialization: pagination fields nested under "page" object
+            int totalElements = objectMapper.readTree(json).get("page").get("totalElements").asInt();
             assertEquals(1, totalElements, "User should see only their own payments");
         }
 
@@ -745,7 +746,8 @@ public class PaymentSystemTest {
                     .andExpect(status().isOk())
                     .andReturn().getResponse().getContentAsString();
 
-            int totalElements = objectMapper.readTree(json).get("totalElements").asInt();
+            // VIA_DTO page serialization: pagination fields nested under "page" object
+            int totalElements = objectMapper.readTree(json).get("page").get("totalElements").asInt();
             assertTrue(totalElements >= 2, "Admin should see all payments");
         }
 
