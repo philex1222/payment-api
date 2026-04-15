@@ -8,8 +8,12 @@ import com.example.paymentapi.dto.PaymentResponse;
 import com.example.paymentapi.exception.PaymentNotFoundException;
 import com.example.paymentapi.model.Transaction;
 import com.example.paymentapi.service.IdempotencyService;
-import com.example.paymentapi.service.PaymentService;
 import com.example.paymentapi.service.TransactionService;
+import com.example.paymentapi.service.command.CancellationHandler;
+import com.example.paymentapi.service.command.CreatePaymentHandler;
+import com.example.paymentapi.service.command.PaymentLifecycleHandler;
+import com.example.paymentapi.service.command.ReversalHandler;
+import com.example.paymentapi.service.query.PaymentQueryService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -49,7 +53,19 @@ public class PaymentControllerTest {
     private MockMvc mockMvc;
 
     @MockitoBean
-    private PaymentService paymentService;
+    private CreatePaymentHandler createHandler;
+
+    @MockitoBean
+    private ReversalHandler reversalHandler;
+
+    @MockitoBean
+    private CancellationHandler cancellationHandler;
+
+    @MockitoBean
+    private PaymentLifecycleHandler lifecycleHandler;
+
+    @MockitoBean
+    private PaymentQueryService queryService;
 
     @MockitoBean
     private IdempotencyService idempotencyService;
@@ -91,7 +107,7 @@ public class PaymentControllerTest {
         paymentResponse.setStatus("PENDING");
         paymentResponse.setCreatedAt(LocalDateTime.now());
 
-        when(paymentService.createPayment(any(PaymentRequest.class))).thenReturn(paymentResponse);
+        when(createHandler.handle(any(PaymentRequest.class))).thenReturn(paymentResponse);
 
         mockMvc.perform(post("/api/v1/payments")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -109,7 +125,7 @@ public class PaymentControllerTest {
         paymentResponse.setStatus("COMPLETED");
         paymentResponse.setCreatedAt(LocalDateTime.now());
 
-        when(paymentService.getPaymentById("payment123")).thenReturn(paymentResponse);
+        when(queryService.findById("payment123")).thenReturn(paymentResponse);
 
         mockMvc.perform(get("/api/v1/payments/payment123")
                         .header("Authorization", token))
@@ -144,7 +160,7 @@ public class PaymentControllerTest {
         paymentResponse.setCreatedAt(LocalDateTime.now());
 
         when(idempotencyService.get("key-abc")).thenReturn(Optional.empty());
-        when(paymentService.createPayment(any(PaymentRequest.class))).thenReturn(paymentResponse);
+        when(createHandler.handle(any(PaymentRequest.class))).thenReturn(paymentResponse);
 
         mockMvc.perform(post("/api/v1/payments")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -181,8 +197,8 @@ public class PaymentControllerTest {
                 .andExpect(jsonPath("$.id").value("payment123"))
                 .andExpect(header().exists("Warning"));
 
-        // Payment service must NOT be called on a replay
-        verify(paymentService, never()).createPayment(any());
+        // Payment handler must NOT be called on a replay
+        verify(createHandler, never()).handle(any());
     }
 
     @Test
@@ -197,7 +213,7 @@ public class PaymentControllerTest {
         paymentResponse.setId("payment456");
         paymentResponse.setStatus("COMPLETED");
 
-        when(paymentService.createPayment(any(PaymentRequest.class))).thenReturn(paymentResponse);
+        when(createHandler.handle(any(PaymentRequest.class))).thenReturn(paymentResponse);
 
         mockMvc.perform(post("/api/v1/payments")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -217,7 +233,7 @@ public class PaymentControllerTest {
         p.setStatus("COMPLETED");
         p.setCreatedAt(LocalDateTime.now());
 
-        when(paymentService.getPayments(isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), any()))
+        when(queryService.findAll(isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), any()))
                 .thenReturn(new PageImpl<>(List.of(p), PageRequest.of(0, 10), 1));
 
         mockMvc.perform(get("/api/v1/payments")
@@ -228,14 +244,14 @@ public class PaymentControllerTest {
 
     @Test
     public void testGetPayments_withStatusFilter_passesFilterToService() throws Exception {
-        when(paymentService.getPayments(eq("FAILED"), isNull(), isNull(), isNull(), isNull(), isNull(), any()))
+        when(queryService.findAll(eq("FAILED"), isNull(), isNull(), isNull(), isNull(), isNull(), any()))
                 .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 10), 0));
 
         mockMvc.perform(get("/api/v1/payments?status=FAILED")
                         .header("Authorization", token))
                 .andExpect(status().isOk());
 
-        verify(paymentService).getPayments(eq("FAILED"), isNull(), isNull(), isNull(), isNull(), isNull(), any());
+        verify(queryService).findAll(eq("FAILED"), isNull(), isNull(), isNull(), isNull(), isNull(), any());
     }
 
     @Test
@@ -252,7 +268,7 @@ public class PaymentControllerTest {
         retried.setStatus("COMPLETED");
         retried.setCreatedAt(LocalDateTime.now());
 
-        when(paymentService.retryPayment("pay-failed")).thenReturn(retried);
+        when(lifecycleHandler.retry("pay-failed")).thenReturn(retried);
 
         mockMvc.perform(post("/api/v1/payments/pay-failed/retry")
                         .header("Authorization", token))
@@ -274,7 +290,7 @@ public class PaymentControllerTest {
         cancelled.setStatus("CANCELLED");
         cancelled.setCreatedAt(LocalDateTime.now());
 
-        when(paymentService.cancelPayment("pay-1")).thenReturn(cancelled);
+        when(cancellationHandler.handle("pay-1")).thenReturn(cancelled);
 
         mockMvc.perform(post("/api/v1/payments/pay-1/cancel")
                         .header("Authorization", token))
@@ -294,7 +310,7 @@ public class PaymentControllerTest {
         tx.setPaymentId("pay-1");
         tx.setStatus("SUCCESS");
 
-        when(paymentService.getPaymentById("pay-1")).thenReturn(paymentResponse);
+        when(queryService.findById("pay-1")).thenReturn(paymentResponse);
         when(transactionService.getTransactionsByPaymentId("pay-1")).thenReturn(List.of(tx));
 
         mockMvc.perform(get("/api/v1/payments/pay-1/transactions")
@@ -312,7 +328,7 @@ public class PaymentControllerTest {
 
     @Test
     public void testGetTransactions_paymentNotFound_returns404() throws Exception {
-        when(paymentService.getPaymentById("nonexistent"))
+        when(queryService.findById("nonexistent"))
                 .thenThrow(new PaymentNotFoundException("Payment not found with ID: nonexistent"));
 
         mockMvc.perform(get("/api/v1/payments/nonexistent/transactions")
@@ -327,7 +343,7 @@ public class PaymentControllerTest {
         paymentResponse.setStatus("PENDING");
         paymentResponse.setCreatedAt(LocalDateTime.now());
 
-        when(paymentService.getPaymentById("pay-2")).thenReturn(paymentResponse);
+        when(queryService.findById("pay-2")).thenReturn(paymentResponse);
         when(transactionService.getTransactionsByPaymentId("pay-2")).thenReturn(List.of());
 
         mockMvc.perform(get("/api/v1/payments/pay-2/transactions")

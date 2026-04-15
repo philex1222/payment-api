@@ -5,120 +5,105 @@ import com.github.benmanes.caffeine.cache.LoadingCache;
 import io.github.resilience4j.ratelimiter.RateLimiter;
 import io.github.resilience4j.ratelimiter.RateLimiterConfig;
 import io.github.resilience4j.ratelimiter.RateLimiterRegistry;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
-import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
 import java.time.Duration;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Rate-limiting interceptor backed by Resilience4j per-client RateLimiters.
+ * Unified rate-limiting interceptor for both general API traffic and login attempts.
+ *
+ * <p>Strategy is injected at construction time — WebMvcConfig creates one general-purpose
+ * bean and one login-specific bean using different RateLimitProperties instances.
  *
  * <p>Client identity is derived from:
  * <ol>
- *   <li>X-Api-Key header (preferred — identifies authenticated API consumers)</li>
- *   <li>RemoteAddr (fallback for anonymous callers — NOT proxy headers, to prevent
- *       IP-spoofing via crafted X-Forwarded-For / X-Real-IP values)</li>
+ *   <li>X-Api-Key header (preferred)</li>
+ *   <li>RemoteAddr (fallback — NOT proxy headers to prevent IP-spoofing)</li>
  * </ol>
- *
- * NOTE: If this service sits behind a trusted reverse proxy that terminates TLS
- * and injects X-Forwarded-For, configure the proxy to sanitise that header
- * rather than reading it here, to prevent clients from spoofing their IP.
- *
- * <p>Rate-limiter buckets are stored in a bounded Caffeine cache (max 10 000
- * entries, expire-after-access = 5 minutes) to prevent unbounded memory growth
- * in long-running instances with many distinct client identities.
- *
- * Constructor injection is used — never @Autowired field injection.
  */
-@Component
 public class RateLimitInterceptor implements HandlerInterceptor {
+
+    public enum Strategy { GENERAL, LOGIN }
 
     private static final Logger logger = LoggerFactory.getLogger(RateLimitInterceptor.class);
     private static final int MAX_CLIENTS = 10_000;
-    private static final long EXPIRE_AFTER_ACCESS_MINUTES = 5;
 
-    private final LoadingCache<String, RateLimiter> rateLimiters;
-    private final RateLimitProperties rateLimitProperties;
+    private final LoadingCache<String, RateLimiter> buckets;
+    private final RateLimitProperties props;
+    private final Strategy strategy;
 
-    public RateLimitInterceptor(RateLimitProperties rateLimitProperties) {
-        this.rateLimitProperties = rateLimitProperties;
-        this.rateLimiters = Caffeine.newBuilder()
+    public RateLimitInterceptor(RateLimitProperties props, Strategy strategy) {
+        this.props = props;
+        this.strategy = strategy;
+        long expireMinutes = strategy == Strategy.LOGIN ? 10 : 5;
+        this.buckets = Caffeine.newBuilder()
                 .maximumSize(MAX_CLIENTS)
-                .expireAfterAccess(EXPIRE_AFTER_ACCESS_MINUTES, TimeUnit.MINUTES)
-                .build(this::createRateLimiter);
+                .expireAfterAccess(expireMinutes, TimeUnit.MINUTES)
+                .build(this::newBucket);
+    }
+
+    /** Default Spring constructor — creates a GENERAL interceptor using injected properties. */
+    public RateLimitInterceptor(RateLimitProperties rateLimitProperties) {
+        this(rateLimitProperties, Strategy.GENERAL);
     }
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler)
             throws Exception {
-        String clientId = getClientIdentifier(request);
-        RateLimiter rateLimiter = rateLimiters.get(clientId);
-        boolean allowRequest = rateLimiter.acquirePermission();
+        String clientId = clientIdentifier(request);
+        RateLimiter limiter = buckets.get(clientId);
 
-        response.addHeader("X-RateLimit-Limit", String.valueOf(rateLimitProperties.getLimit()));
+        response.addHeader("X-RateLimit-Limit", String.valueOf(props.getLimit()));
         response.addHeader("X-RateLimit-Remaining",
-                String.valueOf(rateLimiter.getMetrics().getAvailablePermissions()));
+                String.valueOf(limiter.getMetrics().getAvailablePermissions()));
         response.addHeader("X-RateLimit-Reset",
                 String.valueOf(System.currentTimeMillis()
-                        + rateLimiter.getRateLimiterConfig().getLimitRefreshPeriod().toMillis()));
+                        + limiter.getRateLimiterConfig().getLimitRefreshPeriod().toMillis()));
 
-        if (!allowRequest) {
-            logger.warn("Rate limit exceeded for client: {}", maskClientId(clientId));
-            long retryAfterSeconds =
-                    rateLimiter.getRateLimiterConfig().getLimitRefreshPeriod().toSeconds();
+        if (!limiter.acquirePermission()) {
+            long retryAfter = limiter.getRateLimiterConfig().getLimitRefreshPeriod().toSeconds();
+            logger.warn("[{}] Rate limit exceeded for client: {}", strategy, maskClientId(clientId));
             response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
             response.setContentType("application/json;charset=UTF-8");
-            response.addHeader("Retry-After", String.valueOf(retryAfterSeconds));
+            response.addHeader("Retry-After", String.valueOf(retryAfter));
+            String message = strategy == Strategy.LOGIN
+                    ? "Too many login attempts. Please try again in " + retryAfter + " seconds."
+                    : "Rate limit exceeded. Please try again later.";
             response.getWriter().write(
-                    "{\"status\":429,\"error\":\"Too Many Requests\","
-                    + "\"message\":\"Rate limit exceeded. Please try again later.\"}");
+                    "{\"status\":429,\"error\":\"Too Many Requests\",\"message\":\"" + message + "\"}");
             return false;
         }
         return true;
     }
 
-    /**
-     * Derives a rate-limit bucket key from the request.
-     * Uses API key if present; falls back to the TCP remote address.
-     * Proxy headers (X-Forwarded-For) are intentionally NOT trusted here —
-     * they can be spoofed by any client and must be sanitised at the proxy layer.
-     */
-    private String getClientIdentifier(HttpServletRequest request) {
-        String apiKey = request.getHeader("X-Api-Key");
-        if (apiKey != null && !apiKey.isBlank()) {
-            return "apikey:" + apiKey;
-        }
-        return "ip:" + request.getRemoteAddr();
+    private RateLimiter newBucket(String clientId) {
+        RateLimiterConfig config = RateLimiterConfig.custom()
+                .limitForPeriod(props.getLimit())
+                .limitRefreshPeriod(Duration.ofMillis(props.getRefreshPeriod()))
+                .timeoutDuration(Duration.ofMillis(props.getTimeout()))
+                .build();
+        return RateLimiterRegistry.of(config).rateLimiter(strategy.name() + ":" + clientId);
     }
 
-    private RateLimiter createRateLimiter(String clientId) {
-        logger.debug("Creating rate limiter for client: {}", maskClientId(clientId));
-        RateLimiterConfig config = RateLimiterConfig.custom()
-                .limitRefreshPeriod(Duration.ofMillis(rateLimitProperties.getRefreshPeriod()))
-                .limitForPeriod(rateLimitProperties.getLimit())
-                .timeoutDuration(Duration.ofMillis(rateLimitProperties.getTimeout()))
-                .build();
-        return RateLimiterRegistry.of(config).rateLimiter(clientId);
+    private String clientIdentifier(HttpServletRequest request) {
+        String apiKey = request.getHeader("X-Api-Key");
+        return (apiKey != null && !apiKey.isBlank()) ? "apikey:" + apiKey : "ip:" + request.getRemoteAddr();
     }
 
     private String maskClientId(String clientId) {
-        if (clientId == null || clientId.length() < 8) {
-            return "****";
-        }
-        if (clientId.startsWith("apikey:")) {
-            return "apikey:****" + clientId.substring(clientId.length() - 4);
-        }
+        if (clientId == null || clientId.length() < 8) return "****";
+        if (clientId.startsWith("apikey:")) return "apikey:****" + clientId.substring(clientId.length() - 4);
         return clientId;
     }
 
     /** Clears all per-client rate limiters — intended for test teardown only. */
     public void clearRateLimiters() {
-        rateLimiters.invalidateAll();
+        buckets.invalidateAll();
     }
 }

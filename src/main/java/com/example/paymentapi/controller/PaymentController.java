@@ -6,8 +6,12 @@ import com.example.paymentapi.dto.PaymentStatusRequest;
 import com.example.paymentapi.dto.ReversalRequest;
 import com.example.paymentapi.dto.TransactionResponse;
 import com.example.paymentapi.service.IdempotencyService;
-import com.example.paymentapi.service.PaymentService;
 import com.example.paymentapi.service.TransactionService;
+import com.example.paymentapi.service.command.CancellationHandler;
+import com.example.paymentapi.service.command.CreatePaymentHandler;
+import com.example.paymentapi.service.command.PaymentLifecycleHandler;
+import com.example.paymentapi.service.command.ReversalHandler;
+import com.example.paymentapi.service.query.PaymentQueryService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -38,14 +42,26 @@ public class PaymentController {
 
     static final String IDEMPOTENCY_KEY_HEADER = "Idempotency-Key";
 
-    private final PaymentService paymentService;
+    private final CreatePaymentHandler createHandler;
+    private final ReversalHandler reversalHandler;
+    private final CancellationHandler cancellationHandler;
+    private final PaymentLifecycleHandler lifecycleHandler;
+    private final PaymentQueryService queryService;
     private final IdempotencyService idempotencyService;
     private final TransactionService transactionService;
 
-    public PaymentController(PaymentService paymentService,
+    public PaymentController(CreatePaymentHandler createHandler,
+                             ReversalHandler reversalHandler,
+                             CancellationHandler cancellationHandler,
+                             PaymentLifecycleHandler lifecycleHandler,
+                             PaymentQueryService queryService,
                              IdempotencyService idempotencyService,
                              TransactionService transactionService) {
-        this.paymentService = paymentService;
+        this.createHandler = createHandler;
+        this.reversalHandler = reversalHandler;
+        this.cancellationHandler = cancellationHandler;
+        this.lifecycleHandler = lifecycleHandler;
+        this.queryService = queryService;
         this.idempotencyService = idempotencyService;
         this.transactionService = transactionService;
     }
@@ -66,20 +82,19 @@ public class PaymentController {
         if (idempotencyKey != null && !idempotencyKey.isBlank()) {
             Optional<PaymentResponse> cached = idempotencyService.get(idempotencyKey);
             if (cached.isPresent()) {
-                // Return the original response — same status code, with a replay marker
                 return ResponseEntity.status(HttpStatus.CREATED)
                         .header(HttpHeaders.WARNING, "299 - \"Idempotency-Replayed\"")
                         .body(cached.get());
             }
         }
 
-        PaymentResponse paymentResponse = paymentService.createPayment(paymentRequest);
+        PaymentResponse response = createHandler.handle(paymentRequest);
 
         if (idempotencyKey != null && !idempotencyKey.isBlank()) {
-            idempotencyService.store(idempotencyKey, paymentResponse);
+            idempotencyService.store(idempotencyKey, response);
         }
 
-        return ResponseEntity.status(HttpStatus.CREATED).body(paymentResponse);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @GetMapping("/{id}")
@@ -92,7 +107,7 @@ public class PaymentController {
     public ResponseEntity<PaymentResponse> getPaymentById(
             @Parameter(description = "Payment UUID", required = true)
             @PathVariable String id) {
-        return ResponseEntity.ok(paymentService.getPaymentById(id));
+        return ResponseEntity.ok(queryService.findById(id));
     }
 
     @GetMapping
@@ -120,7 +135,7 @@ public class PaymentController {
         if (amountFrom != null && amountTo != null && amountFrom.compareTo(amountTo) > 0) {
             throw new IllegalArgumentException("amountFrom cannot be greater than amountTo");
         }
-        return ResponseEntity.ok(paymentService.getPayments(status, dateFrom, dateTo, amountFrom, amountTo, currency, pageable));
+        return ResponseEntity.ok(queryService.findAll(status, dateFrom, dateTo, amountFrom, amountTo, currency, pageable));
     }
 
     @GetMapping("/source-account")
@@ -132,7 +147,7 @@ public class PaymentController {
     public ResponseEntity<List<PaymentResponse>> getPaymentsBySourceAccount(
             @Parameter(description = "Source account number", required = true)
             @RequestParam String sourceAccount) {
-        return ResponseEntity.ok(paymentService.getPaymentsBySourceAccount(sourceAccount));
+        return ResponseEntity.ok(queryService.findBySourceAccount(sourceAccount));
     }
 
     @GetMapping("/destination-account")
@@ -144,7 +159,7 @@ public class PaymentController {
     public ResponseEntity<List<PaymentResponse>> getPaymentsByDestinationAccount(
             @Parameter(description = "Destination account number", required = true)
             @RequestParam String destinationAccount) {
-        return ResponseEntity.ok(paymentService.getPaymentsByDestinationAccount(destinationAccount));
+        return ResponseEntity.ok(queryService.findByDestinationAccount(destinationAccount));
     }
 
     @PatchMapping("/{id}/status")
@@ -159,7 +174,7 @@ public class PaymentController {
             @Parameter(description = "Payment UUID", required = true)
             @PathVariable String id,
             @Valid @RequestBody PaymentStatusRequest request) {
-        return ResponseEntity.ok(paymentService.updatePaymentStatus(id, request.getStatus()));
+        return ResponseEntity.ok(lifecycleHandler.updateStatus(id, request.getStatus()));
     }
 
     @PostMapping("/{id}/cancel")
@@ -174,7 +189,7 @@ public class PaymentController {
     public ResponseEntity<PaymentResponse> cancelPayment(
             @Parameter(description = "Payment UUID", required = true)
             @PathVariable String id) {
-        return ResponseEntity.ok(paymentService.cancelPayment(id));
+        return ResponseEntity.ok(cancellationHandler.handle(id));
     }
 
     @GetMapping("/{id}/transactions")
@@ -190,9 +205,7 @@ public class PaymentController {
     public ResponseEntity<List<TransactionResponse>> getTransactionsByPaymentId(
             @Parameter(description = "Payment UUID", required = true)
             @PathVariable String id) {
-        // Ownership is enforced inside getPaymentById — if the caller doesn't own this
-        // payment the call throws AccessDeniedException before we touch transactions.
-        paymentService.getPaymentById(id);
+        queryService.findById(id); // enforces ownership
         List<TransactionResponse> txns = transactionService.getTransactionsByPaymentId(id)
                 .stream()
                 .map(TransactionResponse::from)
@@ -211,7 +224,7 @@ public class PaymentController {
     public ResponseEntity<Void> deletePayment(
             @Parameter(description = "Payment UUID", required = true)
             @PathVariable String id) {
-        paymentService.deletePayment(id);
+        lifecycleHandler.delete(id);
         return ResponseEntity.noContent().build();
     }
 
@@ -227,7 +240,7 @@ public class PaymentController {
     public ResponseEntity<PaymentResponse> retryPayment(
             @Parameter(description = "Payment UUID", required = true)
             @PathVariable String id) {
-        return ResponseEntity.ok(paymentService.retryPayment(id));
+        return ResponseEntity.ok(lifecycleHandler.retry(id));
     }
 
     @PostMapping("/{id}/reversal")
@@ -242,6 +255,6 @@ public class PaymentController {
             @Parameter(description = "Payment UUID", required = true)
             @PathVariable String id,
             @Valid @RequestBody ReversalRequest reversalRequest) {
-        return ResponseEntity.ok(paymentService.initiatePaymentReversal(id, reversalRequest));
+        return ResponseEntity.ok(reversalHandler.handle(id, reversalRequest));
     }
 }

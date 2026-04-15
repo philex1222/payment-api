@@ -9,14 +9,30 @@ import org.springframework.data.redis.cache.RedisCacheManager;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.RedisSerializationContext;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * Consolidated resilience/infrastructure configuration — combines:
+ *  - CacheConfig (Redis cache manager with named cache TTLs)
+ *  - SchedulingConfig (@EnableScheduling)
+ *
+ * Cache name constants are defined here and referenced from service classes
+ * to avoid magic strings.
+ */
 @Configuration
 @EnableCaching
-public class CacheConfig {
+@EnableScheduling
+@ConditionalOnProperty(name = "scheduler.enabled", havingValue = "true", matchIfMissing = true)
+public class ResilienceConfig {
+
+    // Cache name constants — referenced from service layer to avoid magic strings
+    public static final String CACHE_PAYMENT_DETAIL    = "payment-detail";
+    public static final String CACHE_USER_PAYMENT_LIST = "user-payment-list";
+    public static final String CACHE_IDEMPOTENCY       = "idempotency";
 
     /**
      * Base serialization config reused by every named cache configuration.
@@ -38,14 +54,29 @@ public class CacheConfig {
         RedisCacheConfiguration paymentsConfig = baseCacheConfig()
                 .entryTtl(Duration.ofMinutes(10));
 
+        // "payment-detail" — payment detail cache (60s TTL)
+        RedisCacheConfiguration paymentDetailConfig = baseCacheConfig()
+                .entryTtl(Duration.ofSeconds(60));
+
+        // "user-payment-list" — list query cache (30s TTL)
+        RedisCacheConfiguration userPaymentListConfig = baseCacheConfig()
+                .entryTtl(Duration.ofSeconds(30));
+
         // "users" — UserDetails for JWT validation; 60-minute TTL is safe because
         // user role/password changes are rare and cache is evicted on update.
         RedisCacheConfiguration usersConfig = baseCacheConfig()
                 .entryTtl(Duration.ofMinutes(60));
 
+        // "idempotency" — idempotency key cache (24h TTL)
+        RedisCacheConfiguration idempotencyConfig = baseCacheConfig()
+                .entryTtl(Duration.ofHours(24));
+
         Map<String, RedisCacheConfiguration> cacheConfigurations = new HashMap<>();
         cacheConfigurations.put("payments", paymentsConfig);
+        cacheConfigurations.put(CACHE_PAYMENT_DETAIL, paymentDetailConfig);
+        cacheConfigurations.put(CACHE_USER_PAYMENT_LIST, userPaymentListConfig);
         cacheConfigurations.put("users", usersConfig);
+        cacheConfigurations.put(CACHE_IDEMPOTENCY, idempotencyConfig);
 
         return RedisCacheManager.builder(redisConnectionFactory)
                 .cacheDefaults(baseCacheConfig().entryTtl(Duration.ofMinutes(30)))

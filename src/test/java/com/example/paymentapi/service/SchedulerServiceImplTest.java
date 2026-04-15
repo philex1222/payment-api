@@ -4,6 +4,7 @@ import com.example.paymentapi.model.Payment;
 import com.example.paymentapi.model.PaymentStatus;
 import com.example.paymentapi.repository.AuditLogRepository;
 import com.example.paymentapi.repository.PaymentRepository;
+import com.example.paymentapi.service.command.PaymentLifecycleHandler;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -30,7 +31,7 @@ class SchedulerServiceImplTest {
     private AuditLogRepository auditLogRepository;
 
     @Mock
-    private PaymentService paymentService;
+    private PaymentLifecycleHandler lifecycleHandler;
 
     @InjectMocks
     private SchedulerServiceImpl schedulerService;
@@ -53,7 +54,7 @@ class SchedulerServiceImplTest {
 
             schedulerService.retryFailedPayments();
 
-            verify(paymentService, never()).retryPayment(anyString());
+            verify(lifecycleHandler, never()).retry(anyString());
         }
 
         @Test
@@ -67,8 +68,8 @@ class SchedulerServiceImplTest {
 
             schedulerService.retryFailedPayments();
 
-            verify(paymentService).retryPayment("id-1");
-            verify(paymentService).retryPayment("id-2");
+            verify(lifecycleHandler).retry("id-1");
+            verify(lifecycleHandler).retry("id-2");
         }
 
         @Test
@@ -78,13 +79,13 @@ class SchedulerServiceImplTest {
 
             when(paymentRepository.findByStatusAndRetryCountLessThan(anyString(), anyInt()))
                     .thenReturn(List.of(p1, p2));
-            doThrow(new RuntimeException("bank down")).when(paymentService).retryPayment("id-1");
+            doThrow(new RuntimeException("bank down")).when(lifecycleHandler).retry("id-1");
 
             schedulerService.retryFailedPayments();
 
             // id-1 failed but id-2 must still be attempted
-            verify(paymentService).retryPayment("id-1");
-            verify(paymentService).retryPayment("id-2");
+            verify(lifecycleHandler).retry("id-1");
+            verify(lifecycleHandler).retry("id-2");
         }
     }
 

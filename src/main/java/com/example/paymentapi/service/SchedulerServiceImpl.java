@@ -4,6 +4,7 @@ import com.example.paymentapi.model.Payment;
 import com.example.paymentapi.model.PaymentStatus;
 import com.example.paymentapi.repository.AuditLogRepository;
 import com.example.paymentapi.repository.PaymentRepository;
+import com.example.paymentapi.service.command.PaymentLifecycleHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -21,7 +22,7 @@ public class SchedulerServiceImpl implements SchedulerService {
 
     private final PaymentRepository paymentRepository;
     private final AuditLogRepository auditLogRepository;
-    private final PaymentService paymentService;
+    private final PaymentLifecycleHandler lifecycleHandler;
 
     @Value("${scheduler.retry.max-attempts:3}")
     private int maxRetryAttempts;
@@ -34,10 +35,10 @@ public class SchedulerServiceImpl implements SchedulerService {
 
     public SchedulerServiceImpl(PaymentRepository paymentRepository,
                                 AuditLogRepository auditLogRepository,
-                                PaymentService paymentService) {
+                                PaymentLifecycleHandler lifecycleHandler) {
         this.paymentRepository = paymentRepository;
         this.auditLogRepository = auditLogRepository;
-        this.paymentService = paymentService;
+        this.lifecycleHandler = lifecycleHandler;
     }
 
     @Override
@@ -54,7 +55,7 @@ public class SchedulerServiceImpl implements SchedulerService {
         logger.info("Retry job: retrying {} FAILED payment(s) (max attempts: {})", eligible.size(), maxRetryAttempts);
         for (Payment payment : eligible) {
             try {
-                paymentService.retryPayment(payment.getId());
+                lifecycleHandler.retry(payment.getId());
             } catch (Exception e) {
                 logger.error("Retry job: could not retry payment {}: {}", payment.getId(), e.getMessage());
             }
