@@ -29,6 +29,7 @@ public class WebhookSubscriptionRequest {
     @Size(max = 10, message = "eventTypes must not contain more than 10 entries")
     private List<String> eventTypes;
 
+    @Builder.Default
     private boolean adminScope = false;
 
     @Builder.Default

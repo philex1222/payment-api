@@ -50,7 +50,7 @@ A production-grade RESTful microservice for payment processing built with Spring
 
 | Layer | Technology |
 |---|---|
-| Runtime | Java 17, Spring Boot 3.5.13 |
+| Runtime | Java 21, Spring Boot 3.5.13 |
 | Security | Spring Security 6, jjwt 0.13.0 (HS512), BCrypt |
 | Persistence | Spring Data JPA, Hibernate, MySQL 8.4 (prod), H2 (local/test) |
 | Migrations | Flyway 11 (V1–V11) |
@@ -74,8 +74,8 @@ No external services required. The `local` profile uses H2 in-memory database an
 
 ### Prerequisites
 
-- Java 17+
-- Maven 3.8+
+- Java 21+
+- Maven 3.9+
 
 ### Run
 

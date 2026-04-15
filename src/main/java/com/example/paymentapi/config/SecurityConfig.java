@@ -73,7 +73,9 @@ public class SecurityConfig {
                     .policy(ReferrerPolicyHeaderWriter.ReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN))
                 .contentSecurityPolicy(csp ->
                     csp.policyDirectives("default-src 'self'; frame-ancestors 'none'"))
-                .permissionsPolicy(pp ->
+                // permissionsPolicyHeader replaces the deprecated permissionsPolicy overload
+                // (Spring Security 6.4+ — the old method is marked for removal)
+                .permissionsPolicyHeader(pp ->
                     pp.policy("geolocation=(), camera=(), microphone=(), payment=(), usb=()"))
             )
 
@@ -96,6 +98,9 @@ public class SecurityConfig {
                 .requestMatchers("/actuator/health", "/actuator/info").permitAll()
                 .requestMatchers("/actuator/prometheus", "/actuator/metrics").permitAll()
                 .requestMatchers("/actuator/**").hasRole("ADMIN")
+                // Test-only echo endpoint (WebhookTestController, @Profile("test")).
+                // No security risk: this controller is not registered in production.
+                .requestMatchers("/test/**").permitAll()
                 .requestMatchers("/api/v1/payments/**").hasAnyRole("USER", "ADMIN")
                 .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                 .requestMatchers("/api/v1/webhooks/**").hasAnyRole("USER", "ADMIN")
@@ -156,8 +161,9 @@ public class SecurityConfig {
 
     @Bean
     public AuthenticationManager authenticationManager() {
-        DaoAuthenticationProvider provider = new DaoAuthenticationProvider();
-        provider.setUserDetailsService(userDetailsService);
+        // DaoAuthenticationProvider(UserDetailsService) constructor is the non-deprecated
+        // replacement for the no-arg constructor + setUserDetailsService() (Spring Security 6.4+).
+        DaoAuthenticationProvider provider = new DaoAuthenticationProvider(userDetailsService);
         provider.setPasswordEncoder(passwordEncoder());
 
         ProviderManager manager = new ProviderManager(provider);

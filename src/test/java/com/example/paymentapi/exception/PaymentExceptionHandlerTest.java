@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpInputMessage;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.validation.BeanPropertyBindingResult;
@@ -200,7 +201,9 @@ class PaymentExceptionHandlerTest {
         @Test
         @DisplayName("Should return 400 BAD_REQUEST for malformed JSON body")
         void testHandleHttpMessageNotReadable() {
-            HttpMessageNotReadableException ex = new HttpMessageNotReadableException("Malformed JSON");
+            // Use the (String, HttpInputMessage) constructor — the String-only overload is deprecated
+            HttpMessageNotReadableException ex = new HttpMessageNotReadableException(
+                    "Malformed JSON", (HttpInputMessage) null);
 
             ResponseEntity<ErrorResponse> response = exceptionHandler.handleHttpMessageNotReadable(ex, webRequest);
 
@@ -214,7 +217,8 @@ class PaymentExceptionHandlerTest {
         @Test
         @DisplayName("Should include request path in response")
         void testHandleHttpMessageNotReadable_HasPath() {
-            HttpMessageNotReadableException ex = new HttpMessageNotReadableException("Missing body");
+            HttpMessageNotReadableException ex = new HttpMessageNotReadableException(
+                    "Missing body", (HttpInputMessage) null);
 
             ResponseEntity<ErrorResponse> response = exceptionHandler.handleHttpMessageNotReadable(ex, webRequest);
 

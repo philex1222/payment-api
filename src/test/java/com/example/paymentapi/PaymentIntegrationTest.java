@@ -253,7 +253,8 @@ public class PaymentIntegrationTest {
                             .param("size", "10"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.content").isArray())
-                    .andExpect(jsonPath("$.totalElements").isNumber());
+                    // VIA_DTO page serialization: pagination fields are nested under "page" object
+                    .andExpect(jsonPath("$.page.totalElements").isNumber());
         }
 
         @Test

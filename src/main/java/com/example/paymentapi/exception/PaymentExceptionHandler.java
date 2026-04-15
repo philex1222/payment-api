@@ -280,10 +280,10 @@ public class PaymentExceptionHandler {
     }
 
     private ErrorResponse createErrorResponse(HttpStatus status, String error, String message, WebRequest request) {
-        String path = "";
-        if (request instanceof ServletWebRequest) {
-            path = ((ServletWebRequest) request).getRequest().getRequestURI();
-        }
+        // Java 21 pattern-matching instanceof — eliminates the redundant cast
+        String path = (request instanceof ServletWebRequest swr)
+                ? swr.getRequest().getRequestURI()
+                : "";
         return ErrorResponse.of(status.value(), error, message, path);
     }
 

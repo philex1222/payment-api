@@ -86,17 +86,18 @@
               3.1.1 fixes all HIGH CVEs found by Trivy as of 2026-04-15:
                 CVE-2026-29062  (fixed 3.1.0) — DoS via excessive JSON nesting
                 GHSA-2m67-wjpj-xhg9 (fixed 3.1.1) — document length constraint bypass
+              3.1.2 is a patch release with additional bug fixes; upgrading from 3.1.1.
               jackson-databind and jackson-core must be co-versioned.
             -->
             <dependency>
                 <groupId>tools.jackson.core</groupId>
                 <artifactId>jackson-databind</artifactId>
-                <version>3.1.1</version>
+                <version>3.1.2</version>
             </dependency>
             <dependency>
                 <groupId>tools.jackson.core</groupId>
                 <artifactId>jackson-core</artifactId>
-                <version>3.1.1</version>
+                <version>3.1.2</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

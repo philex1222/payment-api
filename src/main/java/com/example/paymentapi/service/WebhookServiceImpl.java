@@ -14,6 +14,7 @@ import com.example.paymentapi.repository.WebhookDeliveryRepository;
 import com.example.paymentapi.repository.WebhookSubscriptionRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,6 +39,13 @@ public class WebhookServiceImpl implements WebhookService {
     private final WebhookDeliveryRepository deliveryRepository;
     private final UserRepository userRepository;
     private final AuditService auditService;
+
+    /**
+     * When {@code true}, the SSRF guard permits loopback and private-network target URLs.
+     * Should only be {@code true} in the test profile (for echo-endpoint BDD scenarios).
+     */
+    @Value("${webhook.ssrf.allow-localhost:false}")
+    private boolean allowLocalhost;
 
     public WebhookServiceImpl(WebhookSubscriptionRepository subscriptionRepository,
                                WebhookDeliveryRepository deliveryRepository,
@@ -184,8 +192,8 @@ public class WebhookServiceImpl implements WebhookService {
             throw new IllegalArgumentException("targetUrl host could not be resolved: " + host);
         }
 
-        if (address.isLoopbackAddress() || address.isLinkLocalAddress()
-                || address.isSiteLocalAddress() || address.isAnyLocalAddress()) {
+        if (!allowLocalhost && (address.isLoopbackAddress() || address.isLinkLocalAddress()
+                || address.isSiteLocalAddress() || address.isAnyLocalAddress())) {
             throw new IllegalArgumentException(
                 "targetUrl must not point to a private or internal network address");
         }

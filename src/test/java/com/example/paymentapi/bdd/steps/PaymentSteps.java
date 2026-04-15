@@ -81,12 +81,21 @@ public class PaymentSteps {
 
     @When("I reverse the payment")
     public void reversePayment() {
+        // Legacy step kept for backward compatibility — delegates to full reversal
+        initiateReversalWithReason("BDD reversal test");
+    }
+
+    @When("I initiate a reversal of the payment with reason {string}")
+    public void initiateReversalWithReason(String reason) {
+        String body = String.format(
+                "{\"reason\":\"%s\",\"partialReversal\":false}", reason);
         ctx.setLastResponse(
             given()
                 .contentType(ContentType.JSON)
                 .header("Authorization", "Bearer " + ctx.getAuthToken())
+                .body(body)
             .when()
-                .post("/api/v1/payments/{id}/reverse", ctx.getLastPaymentId())
+                .post("/api/v1/payments/{id}/reversal", ctx.getLastPaymentId())
         );
     }
 
