@@ -23,6 +23,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -152,12 +153,12 @@ public class AuthController {
                     request.getCurrentPassword(),
                     request.getNewPassword());
             return ResponseEntity.ok().build();
-        } catch (BadCredentialsException e) {
+        } catch (UsernameNotFoundException | BadCredentialsException e) {
             logger.warn("Password change rejected for user '{}': {}", userDetails.getUsername(), e.getMessage());
             ErrorResponse error = ErrorResponse.of(
                     HttpStatus.UNAUTHORIZED.value(),
                     "Unauthorized",
-                    "Current password is incorrect",
+                    "Authentication failed: " + e.getMessage(),
                     "/api/v1/auth/change-password");
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(error);
         }
