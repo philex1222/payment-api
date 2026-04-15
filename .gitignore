@@ -40,3 +40,6 @@ build/
 ### Local secrets ###
 .env
 logs/
+
+### Git worktrees ###
+.worktrees/
