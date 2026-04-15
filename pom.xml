@@ -30,18 +30,21 @@
         <cucumber.version>7.22.1</cucumber.version>
         <resilience4j.version>2.4.0</resilience4j.version>
         <!--
-          Pin Tomcat to the version shipped by the Spring Boot 3.5.13 BOM (10.1.53),
-          which covers all HIGH CVEs up to the BOM cut date:
+          Pin Tomcat ahead of the Spring Boot 3.5.13 BOM (ships 10.1.53).
+          10.1.54 fixes all HIGH CVEs found by Trivy as of 2026-04-15:
             CVE-2025-48988 (fixed 10.1.42) — multipart DoS
             CVE-2025-52520 (fixed 10.1.43) — integer overflow multipart
             CVE-2025-53506 (fixed 10.1.43) — HTTP/2 resource exhaustion
             CVE-2025-48989 (fixed 10.1.44) — HTTP/2 MadeYouReset DoS
             CVE-2025-55752 (fixed 10.1.45) — path traversal + RCE via rewrite
             CVE-2026-24734 (fixed 10.1.52) — OCSP revocation bypass
+            CVE-2026-34483 (fixed 10.1.54) — JsonAccessLogValve info disclosure
+            CVE-2026-34486 (fixed 10.1.54) — EncryptInterceptor bypass
+            CVE-2026-34487 (fixed 10.1.54) — sensitive data in log files
           Keeping the explicit property so any future Trivy gate failure makes
           the intended version immediately visible in pom.xml.
         -->
-        <tomcat.version>10.1.53</tomcat.version>
+        <tomcat.version>10.1.54</tomcat.version>
         <!--
           Override Flyway within the 11.x line (Spring Boot BOM ships 11.7.2).
           11.8.x and 11.9.x are minor bug-fix releases with no breaking API changes.
@@ -76,6 +79,24 @@
                 <groupId>org.apache.commons</groupId>
                 <artifactId>commons-lang3</artifactId>
                 <version>3.20.0</version>
+            </dependency>
+            <!--
+              Pin Jackson 3.x (tools.jackson) ahead of logstash-logback-encoder:9.0
+              which pulls in tools.jackson.core:jackson-databind:3.0.1.
+              3.1.1 fixes all HIGH CVEs found by Trivy as of 2026-04-15:
+                CVE-2026-29062  (fixed 3.1.0) — DoS via excessive JSON nesting
+                GHSA-2m67-wjpj-xhg9 (fixed 3.1.1) — document length constraint bypass
+              jackson-databind and jackson-core must be co-versioned.
+            -->
+            <dependency>
+                <groupId>tools.jackson.core</groupId>
+                <artifactId>jackson-databind</artifactId>
+                <version>3.1.1</version>
+            </dependency>
+            <dependency>
+                <groupId>tools.jackson.core</groupId>
+                <artifactId>jackson-core</artifactId>
+                <version>3.1.1</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
