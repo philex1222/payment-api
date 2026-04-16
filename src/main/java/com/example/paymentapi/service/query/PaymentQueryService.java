@@ -1,14 +1,17 @@
 package com.example.paymentapi.service.query;
 
+import com.example.paymentapi.config.ResilienceConfig;
 import com.example.paymentapi.dto.PaymentResponse;
 import com.example.paymentapi.exception.PaymentNotFoundException;
 import com.example.paymentapi.model.Payment;
+import com.example.paymentapi.model.PaymentStatus;
 import com.example.paymentapi.repository.PaymentRepository;
 import com.example.paymentapi.repository.PaymentSpecification;
 import com.example.paymentapi.service.shared.PaymentMapper;
 import com.example.paymentapi.service.shared.PaymentSecurityHelper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
@@ -37,6 +40,7 @@ public class PaymentQueryService {
         this.security = security;
     }
 
+    @Cacheable(value = ResilienceConfig.CACHE_PAYMENT_DETAIL, key = "#id")
     public PaymentResponse findById(String id) {
         logger.debug("Retrieving payment: {}", id);
         Payment payment = paymentRepository.findById(id)
@@ -63,7 +67,18 @@ public class PaymentQueryService {
             spec = spec.and(PaymentSpecification.hasCurrency(currency));
         if (!security.isCurrentUserAdmin())
             spec = spec.and(PaymentSpecification.ownedBy(security.currentUsername()));
-        return paymentRepository.findAll(spec, pageable).map(mapper::toResponse);
+        return paymentRepository.findAll(spec, pageable).map(p ->
+            PaymentResponse.builder()
+                .id(p.getId())
+                .sourceAccount(mapper.maskAccount(p.getSourceAccount()))
+                .destinationAccount(mapper.maskAccount(p.getDestinationAccount()))
+                .amount(p.getAmount())
+                .currency(p.getCurrency())
+                .status(p.getStatus())
+                .statusDescription(PaymentStatus.fromString(p.getStatus()).getDescription())
+                .createdAt(p.getCreatedAt())
+                .updatedAt(p.getUpdatedAt())
+                .build());
     }
 
     public List<PaymentResponse> findBySourceAccount(String sourceAccount) {

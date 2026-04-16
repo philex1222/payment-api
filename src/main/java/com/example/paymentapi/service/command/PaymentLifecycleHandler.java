@@ -13,6 +13,7 @@ import com.example.paymentapi.service.AuditService;
 import com.example.paymentapi.service.BankingAPIService;
 import com.example.paymentapi.service.NotificationService;
 import com.example.paymentapi.service.TransactionService;
+import com.example.paymentapi.config.ResilienceConfig;
 import com.example.paymentapi.service.shared.PaymentEventPublisher;
 import com.example.paymentapi.service.shared.PaymentMapper;
 import com.example.paymentapi.service.shared.PaymentSecurityHelper;
@@ -20,6 +21,8 @@ import com.example.paymentapi.service.shared.PaymentStateMachine;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -66,6 +69,10 @@ public class PaymentLifecycleHandler {
     }
 
     /** Admin-only: generic status update. */
+    @Caching(evict = {
+        @CacheEvict(value = ResilienceConfig.CACHE_PAYMENT_DETAIL, key = "#id"),
+        @CacheEvict(value = ResilienceConfig.CACHE_USER_PAYMENT_LIST, allEntries = true)
+    })
     public PaymentResponse updateStatus(String id, String status) {
         Payment payment = paymentRepository.findById(id)
                 .orElseThrow(() -> new PaymentNotFoundException("Payment not found with ID: " + id));
@@ -84,6 +91,10 @@ public class PaymentLifecycleHandler {
     }
 
     /** Delete a non-completed payment. */
+    @Caching(evict = {
+        @CacheEvict(value = ResilienceConfig.CACHE_PAYMENT_DETAIL, key = "#id"),
+        @CacheEvict(value = ResilienceConfig.CACHE_USER_PAYMENT_LIST, allEntries = true)
+    })
     public void delete(String id) {
         Payment payment = paymentRepository.findById(id)
                 .orElseThrow(() -> new PaymentNotFoundException("Payment not found with ID: " + id));
@@ -95,6 +106,10 @@ public class PaymentLifecycleHandler {
     }
 
     /** Retry a FAILED payment. */
+    @Caching(evict = {
+        @CacheEvict(value = ResilienceConfig.CACHE_PAYMENT_DETAIL, key = "#id"),
+        @CacheEvict(value = ResilienceConfig.CACHE_USER_PAYMENT_LIST, allEntries = true)
+    })
     public PaymentResponse retry(String id) {
         Payment payment = paymentRepository.findById(id)
                 .orElseThrow(() -> new PaymentNotFoundException("Payment not found with ID: " + id));

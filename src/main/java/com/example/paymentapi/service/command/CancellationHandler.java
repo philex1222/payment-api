@@ -8,12 +8,15 @@ import com.example.paymentapi.model.PaymentStatus;
 import com.example.paymentapi.model.WebhookEventType;
 import com.example.paymentapi.repository.PaymentRepository;
 import com.example.paymentapi.service.AuditService;
+import com.example.paymentapi.config.ResilienceConfig;
 import com.example.paymentapi.service.shared.PaymentEventPublisher;
 import com.example.paymentapi.service.shared.PaymentMapper;
 import com.example.paymentapi.service.shared.PaymentSecurityHelper;
 import com.example.paymentapi.service.shared.PaymentStateMachine;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -47,6 +50,10 @@ public class CancellationHandler {
         this.mapper = mapper;
     }
 
+    @Caching(evict = {
+        @CacheEvict(value = ResilienceConfig.CACHE_PAYMENT_DETAIL, key = "#id"),
+        @CacheEvict(value = ResilienceConfig.CACHE_USER_PAYMENT_LIST, allEntries = true)
+    })
     public PaymentResponse handle(String id) {
         logger.info("Cancelling payment: {}", id);
         Payment payment = paymentRepository.findById(id)

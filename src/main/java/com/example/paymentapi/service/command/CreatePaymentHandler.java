@@ -20,8 +20,11 @@ import com.example.paymentapi.service.shared.PaymentMapper;
 import com.example.paymentapi.service.shared.PaymentSecurityHelper;
 import com.example.paymentapi.service.shared.PaymentValidationService;
 import io.micrometer.core.instrument.Timer;
+import com.example.paymentapi.config.ResilienceConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -69,6 +72,10 @@ public class CreatePaymentHandler {
         this.mapper = mapper;
     }
 
+    @Caching(evict = {
+        @CacheEvict(value = ResilienceConfig.CACHE_PAYMENT_DETAIL, allEntries = true),
+        @CacheEvict(value = ResilienceConfig.CACHE_USER_PAYMENT_LIST, allEntries = true)
+    })
     public PaymentResponse handle(PaymentRequest request)
             throws InsufficientFundsException, InvalidAccountException {
         logger.info("Creating payment from {} to {} for {} {}",

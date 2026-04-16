@@ -9,16 +9,21 @@ import org.springframework.data.redis.cache.RedisCacheManager;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.RedisSerializationContext;
+import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.annotation.EnableScheduling;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ThreadPoolExecutor;
 
 /**
  * Consolidated resilience/infrastructure configuration — combines:
  *  - CacheConfig (Redis cache manager with named cache TTLs)
  *  - SchedulingConfig (@EnableScheduling)
+ *  - AsyncConfig (@EnableAsync + taskExecutor)
  *
  * Cache name constants are defined here and referenced from service classes
  * to avoid magic strings.
@@ -26,6 +31,7 @@ import java.util.Map;
 @Configuration
 @EnableCaching
 @EnableScheduling
+@EnableAsync
 @ConditionalOnProperty(name = "scheduler.enabled", havingValue = "true", matchIfMissing = true)
 public class ResilienceConfig {
 
@@ -82,5 +88,24 @@ public class ResilienceConfig {
                 .cacheDefaults(baseCacheConfig().entryTtl(Duration.ofMinutes(30)))
                 .withInitialCacheConfigurations(cacheConfigurations)
                 .build();
+    }
+
+    /**
+     * Bounded thread pool for @Async tasks (e.g. NotificationService).
+     * On Java 21 with {@code spring.threads.virtual.enabled=true} Spring Boot
+     * auto-configures a virtual-thread executor; this bean acts as a fallback
+     * for environments where virtual threads are disabled.
+     */
+    @Bean(name = "taskExecutor")
+    public Executor taskExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(2);
+        executor.setMaxPoolSize(10);
+        executor.setQueueCapacity(100);
+        executor.setThreadNamePrefix("async-");
+        // Run in the caller's thread when the queue is full — never drop tasks
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+        executor.initialize();
+        return executor;
     }
 }
