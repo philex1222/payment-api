@@ -3,6 +3,7 @@ package com.example.paymentapi.service.query;
 import com.example.paymentapi.config.ResilienceConfig;
 import com.example.paymentapi.dto.PaymentResponse;
 import com.example.paymentapi.exception.PaymentNotFoundException;
+import com.example.paymentapi.util.PaymentConstants;
 import com.example.paymentapi.model.Payment;
 import com.example.paymentapi.model.PaymentStatus;
 import com.example.paymentapi.repository.PaymentRepository;
@@ -44,7 +45,7 @@ public class PaymentQueryService {
     public PaymentResponse findById(String id) {
         logger.debug("Retrieving payment: {}", id);
         Payment payment = paymentRepository.findById(id)
-                .orElseThrow(() -> new PaymentNotFoundException("Payment not found with ID: " + id));
+                .orElseThrow(() -> new PaymentNotFoundException(PaymentConstants.ERR_PAYMENT_NOT_FOUND + id));
         security.checkOwnership(payment);
         return mapper.toResponse(payment);
     }

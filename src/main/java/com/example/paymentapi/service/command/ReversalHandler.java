@@ -13,6 +13,7 @@ import com.example.paymentapi.service.AuditService;
 import com.example.paymentapi.service.BankingAPIService;
 import com.example.paymentapi.service.NotificationService;
 import com.example.paymentapi.config.ResilienceConfig;
+import com.example.paymentapi.util.PaymentConstants;
 import com.example.paymentapi.service.shared.PaymentEventPublisher;
 import com.example.paymentapi.service.shared.PaymentMapper;
 import com.example.paymentapi.service.shared.PaymentSecurityHelper;
@@ -69,7 +70,7 @@ public class ReversalHandler {
     public PaymentResponse handle(String id, ReversalRequest request) {
         logger.info("Initiating reversal for payment: {} reason: {}", id, request.getReason());
         Payment payment = paymentRepository.findById(id)
-                .orElseThrow(() -> new PaymentNotFoundException("Payment not found with ID: " + id));
+                .orElseThrow(() -> new PaymentNotFoundException(PaymentConstants.ERR_PAYMENT_NOT_FOUND + id));
         security.checkOwnership(payment);
 
         PaymentStatus current = PaymentStatus.fromString(payment.getStatus());
@@ -80,9 +81,9 @@ public class ReversalHandler {
 
         if (request.isPartialReversal()) {
             if (reversalAmount.compareTo(BigDecimal.ZERO) <= 0)
-                throw new PaymentReversalException(id, "Reversal amount must be positive");
+                throw new PaymentReversalException(id, PaymentConstants.ERR_REVERSAL_POSITIVE);
             if (reversalAmount.compareTo(payment.getAmount()) > 0)
-                throw new PaymentReversalException(id, "Reversal amount cannot exceed original payment amount");
+                throw new PaymentReversalException(id, PaymentConstants.ERR_REVERSAL_EXCEEDS);
         }
 
         try {

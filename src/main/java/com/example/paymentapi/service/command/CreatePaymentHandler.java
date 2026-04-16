@@ -21,6 +21,7 @@ import com.example.paymentapi.service.shared.PaymentSecurityHelper;
 import com.example.paymentapi.service.shared.PaymentValidationService;
 import io.micrometer.core.instrument.Timer;
 import com.example.paymentapi.config.ResilienceConfig;
+import com.example.paymentapi.util.PaymentConstants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.cache.annotation.CacheEvict;
@@ -109,7 +110,7 @@ public class CreatePaymentHandler {
         Payment saved = paymentRepository.save(payment);
 
         Transaction transaction = transactionService.createTransaction(saved.getId());
-        auditService.logPaymentEvent(saved.getId(), "PAYMENT_CREATED");
+        auditService.logPaymentEvent(saved.getId(), PaymentConstants.AUDIT_PAYMENT_CREATED);
 
         try {
             bankingAPIService.transferFunds(request.getSourceAccount(),
@@ -119,7 +120,7 @@ public class CreatePaymentHandler {
             paymentMetrics.incrementCompleted();
             paymentMetrics.stopTimer(timerSample);
             transactionService.updateTransactionStatus(transaction.getId(), "SUCCESS");
-            auditService.logPaymentEvent(saved.getId(), "PAYMENT_COMPLETED");
+            auditService.logPaymentEvent(saved.getId(), PaymentConstants.AUDIT_PAYMENT_COMPLETED);
             notificationService.sendPaymentNotification("user@example.com",
                     "Payment completed. Amount: " + request.getAmount() + " " + request.getCurrency());
         } catch (Exception e) {
@@ -130,7 +131,7 @@ public class CreatePaymentHandler {
             paymentMetrics.stopTimer(timerSample);
             transactionService.updateTransactionStatus(transaction.getId(), "FAILED");
             transactionService.updateTransactionFailureReason(transaction.getId(), e.getMessage());
-            auditService.logPaymentEvent(saved.getId(), "PAYMENT_FAILED");
+            auditService.logPaymentEvent(saved.getId(), PaymentConstants.AUDIT_PAYMENT_FAILED);
             throw e;
         }
 

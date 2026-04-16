@@ -5,6 +5,7 @@ import com.example.paymentapi.dto.WebhookSubscriptionRequest;
 import com.example.paymentapi.dto.WebhookSubscriptionResponse;
 import com.example.paymentapi.exception.UserNotFoundException;
 import com.example.paymentapi.exception.WebhookSubscriptionNotFoundException;
+import com.example.paymentapi.util.WebhookConstants;
 import com.example.paymentapi.model.User;
 import com.example.paymentapi.model.WebhookDelivery;
 import com.example.paymentapi.model.WebhookEventType;
@@ -130,7 +131,7 @@ public class WebhookServiceImpl implements WebhookService {
         WebhookSubscription sub = findSubscription(id);
         checkOwnership(sub, username, isAdmin);
         subscriptionRepository.delete(sub);
-        auditService.logPaymentEvent(id, "WEBHOOK_DELETED:user=" + username);
+        auditService.logPaymentEvent(id, WebhookConstants.AUDIT_WEBHOOK_DELETED + ":user=" + username);
         logger.info("Webhook subscription {} deleted by {}", id, username);
     }
 
@@ -145,7 +146,7 @@ public class WebhookServiceImpl implements WebhookService {
 
     private WebhookSubscription findSubscription(String id) {
         return subscriptionRepository.findById(id)
-                .orElseThrow(() -> new WebhookSubscriptionNotFoundException("Webhook subscription not found: " + id));
+                .orElseThrow(() -> new WebhookSubscriptionNotFoundException(WebhookConstants.ERR_WEBHOOK_NOT_FOUND + id));
     }
 
     private User findUser(String username) {

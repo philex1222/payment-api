@@ -14,6 +14,7 @@ import com.example.paymentapi.service.BankingAPIService;
 import com.example.paymentapi.service.NotificationService;
 import com.example.paymentapi.service.TransactionService;
 import com.example.paymentapi.config.ResilienceConfig;
+import com.example.paymentapi.util.PaymentConstants;
 import com.example.paymentapi.service.shared.PaymentEventPublisher;
 import com.example.paymentapi.service.shared.PaymentMapper;
 import com.example.paymentapi.service.shared.PaymentSecurityHelper;
@@ -75,7 +76,7 @@ public class PaymentLifecycleHandler {
     })
     public PaymentResponse updateStatus(String id, String status) {
         Payment payment = paymentRepository.findById(id)
-                .orElseThrow(() -> new PaymentNotFoundException("Payment not found with ID: " + id));
+                .orElseThrow(() -> new PaymentNotFoundException(PaymentConstants.ERR_PAYMENT_NOT_FOUND + id));
         security.checkOwnership(payment);
         PaymentStatus current = PaymentStatus.fromString(payment.getStatus());
         PaymentStatus target = PaymentStatus.fromString(status);
@@ -97,12 +98,12 @@ public class PaymentLifecycleHandler {
     })
     public void delete(String id) {
         Payment payment = paymentRepository.findById(id)
-                .orElseThrow(() -> new PaymentNotFoundException("Payment not found with ID: " + id));
+                .orElseThrow(() -> new PaymentNotFoundException(PaymentConstants.ERR_PAYMENT_NOT_FOUND + id));
         security.checkOwnership(payment);
         if (PaymentStatus.fromString(payment.getStatus()) == PaymentStatus.COMPLETED)
-            throw new IllegalStateException("Cannot delete a completed payment. Use reversal instead.");
+            throw new IllegalStateException(PaymentConstants.ERR_DELETE_COMPLETED);
         paymentRepository.delete(payment);
-        auditService.logPaymentEvent(id, "PAYMENT_DELETED");
+        auditService.logPaymentEvent(id, PaymentConstants.AUDIT_PAYMENT_DELETED);
     }
 
     /** Retry a FAILED payment. */
@@ -112,16 +113,16 @@ public class PaymentLifecycleHandler {
     })
     public PaymentResponse retry(String id) {
         Payment payment = paymentRepository.findById(id)
-                .orElseThrow(() -> new PaymentNotFoundException("Payment not found with ID: " + id));
+                .orElseThrow(() -> new PaymentNotFoundException(PaymentConstants.ERR_PAYMENT_NOT_FOUND + id));
         security.checkOwnership(payment);
         PaymentStatus current = PaymentStatus.fromString(payment.getStatus());
         stateMachine.assertCanTransitionTo(id, current, PaymentStatus.PENDING);
         if (payment.getRetryCount() >= maxRetryAttempts)
-            throw new IllegalStateException("Payment has reached the maximum retry limit of " + maxRetryAttempts);
+            throw new IllegalStateException(PaymentConstants.ERR_MAX_RETRIES + maxRetryAttempts);
 
         int attempt = payment.getRetryCount() + 1;
         paymentMetrics.incrementRetried();
-        auditService.logPaymentEvent(id, "PAYMENT_RETRY_ATTEMPT:" + attempt);
+        auditService.logPaymentEvent(id, PaymentConstants.AUDIT_PAYMENT_RETRY + attempt);
         payment.setStatus(PaymentStatus.PENDING.getCode());
         paymentRepository.save(payment);
 
@@ -141,7 +142,7 @@ public class PaymentLifecycleHandler {
             paymentRepository.save(payment);
             transactionService.updateTransactionStatus(transaction.getId(), "SUCCESS");
             paymentMetrics.incrementRetriedSuccess();
-            auditService.logPaymentEvent(id, "PAYMENT_RETRY_SUCCEEDED");
+            auditService.logPaymentEvent(id, PaymentConstants.AUDIT_RETRY_SUCCEEDED);
             notificationService.sendPaymentNotification("user@example.com",
                     "Retried payment completed. Amount: " + payment.getAmount() + " " + payment.getCurrency());
         } catch (Exception e) {

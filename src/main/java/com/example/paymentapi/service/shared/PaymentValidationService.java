@@ -3,6 +3,7 @@ package com.example.paymentapi.service.shared;
 import com.example.paymentapi.exception.InsufficientFundsException;
 import com.example.paymentapi.exception.InvalidAccountException;
 import com.example.paymentapi.service.BankingAPIService;
+import com.example.paymentapi.util.PaymentConstants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -30,15 +31,15 @@ public class PaymentValidationService {
             throws InvalidAccountException {
         if (!bankingAPIService.validateAccount(sourceAccount)) {
             logger.warn("Invalid source account: {}", mapper.maskAccount(sourceAccount));
-            throw new InvalidAccountException("Invalid source account");
+            throw new InvalidAccountException(PaymentConstants.ERR_INVALID_SOURCE);
         }
         if (!bankingAPIService.validateAccount(destinationAccount)) {
             logger.warn("Invalid destination account: {}", mapper.maskAccount(destinationAccount));
-            throw new InvalidAccountException("Invalid destination account");
+            throw new InvalidAccountException(PaymentConstants.ERR_INVALID_DESTINATION);
         }
         if (sourceAccount.equals(destinationAccount)) {
             logger.warn("Attempted self-transfer on account: {}", mapper.maskAccount(sourceAccount));
-            throw new InvalidAccountException("Source and destination accounts cannot be the same");
+            throw new InvalidAccountException(PaymentConstants.ERR_SELF_TRANSFER);
         }
     }
 
@@ -46,7 +47,7 @@ public class PaymentValidationService {
             throws InsufficientFundsException {
         if (!bankingAPIService.hasSufficientFunds(sourceAccount, amount)) {
             logger.warn("Insufficient funds in account: {}", mapper.maskAccount(sourceAccount));
-            throw new InsufficientFundsException("Insufficient funds in the source account");
+            throw new InsufficientFundsException(PaymentConstants.ERR_INSUFFICIENT_FUNDS);
         }
     }
 }

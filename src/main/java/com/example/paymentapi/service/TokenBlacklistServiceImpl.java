@@ -55,6 +55,7 @@ public class TokenBlacklistServiceImpl implements TokenBlacklistService {
 
     @Override
     public boolean isBlacklisted(String token) {
+        if (token == null) return false;
         String hash = hashToken(token);
         // Check Redis first
         try {

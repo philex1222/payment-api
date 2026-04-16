@@ -13,6 +13,8 @@ import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
+import com.example.paymentapi.util.PaymentConstants;
+
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
@@ -35,10 +37,10 @@ import java.util.concurrent.ThreadPoolExecutor;
 @ConditionalOnProperty(name = "scheduler.enabled", havingValue = "true", matchIfMissing = true)
 public class ResilienceConfig {
 
-    // Cache name constants — referenced from service layer to avoid magic strings
-    public static final String CACHE_PAYMENT_DETAIL    = "payment-detail";
-    public static final String CACHE_USER_PAYMENT_LIST = "user-payment-list";
-    public static final String CACHE_IDEMPOTENCY       = "idempotency";
+    // Cache name constants — re-exported from PaymentConstants; referenced from service layer
+    public static final String CACHE_PAYMENT_DETAIL    = PaymentConstants.CACHE_PAYMENT_DETAIL;
+    public static final String CACHE_USER_PAYMENT_LIST = PaymentConstants.CACHE_USER_PAYMENT_LIST;
+    public static final String CACHE_IDEMPOTENCY       = PaymentConstants.CACHE_IDEMPOTENCY;
 
     /**
      * Base serialization config reused by every named cache configuration.

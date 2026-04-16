@@ -9,6 +9,7 @@ import com.example.paymentapi.model.WebhookEventType;
 import com.example.paymentapi.repository.PaymentRepository;
 import com.example.paymentapi.service.AuditService;
 import com.example.paymentapi.config.ResilienceConfig;
+import com.example.paymentapi.util.PaymentConstants;
 import com.example.paymentapi.service.shared.PaymentEventPublisher;
 import com.example.paymentapi.service.shared.PaymentMapper;
 import com.example.paymentapi.service.shared.PaymentSecurityHelper;
@@ -57,14 +58,14 @@ public class CancellationHandler {
     public PaymentResponse handle(String id) {
         logger.info("Cancelling payment: {}", id);
         Payment payment = paymentRepository.findById(id)
-                .orElseThrow(() -> new PaymentNotFoundException("Payment not found with ID: " + id));
+                .orElseThrow(() -> new PaymentNotFoundException(PaymentConstants.ERR_PAYMENT_NOT_FOUND + id));
         security.checkOwnership(payment);
         PaymentStatus current = PaymentStatus.fromString(payment.getStatus());
         stateMachine.assertCanTransitionTo(id, current, PaymentStatus.CANCELLED);
         payment.setStatus(PaymentStatus.CANCELLED.getCode());
         Payment updated = paymentRepository.save(payment);
         paymentMetrics.incrementCancelled();
-        auditService.logPaymentEvent(id, "PAYMENT_CANCELLED");
+        auditService.logPaymentEvent(id, PaymentConstants.AUDIT_PAYMENT_CANCELLED);
         PaymentResponse response = mapper.toResponse(updated);
         eventPublisher.publish(WebhookEventType.PAYMENT_CANCELLED, payment.getCreatedBy(), response);
         return response;
