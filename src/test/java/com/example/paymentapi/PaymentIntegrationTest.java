@@ -8,7 +8,9 @@ import com.example.paymentapi.dto.PaymentStatusRequest;
 import com.example.paymentapi.dto.ReversalRequest;
 import com.example.paymentapi.model.Payment;
 import com.example.paymentapi.repository.PaymentRepository;
+import com.example.paymentapi.temporal.dto.PaymentCreationResult;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.temporal.testing.TestWorkflowEnvironment;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -46,6 +48,9 @@ public class PaymentIntegrationTest {
 
     @Autowired
     private PaymentRepository paymentRepository;
+
+    @Autowired
+    private TestWorkflowEnvironment testEnv;
 
     private String authToken;
 
@@ -130,12 +135,25 @@ public class PaymentIntegrationTest {
         void testCreatePayment_Success() throws Exception {
             PaymentRequest request = createValidPaymentRequest();
 
-            mockMvc.perform(post("/api/v1/payments")
+            String json = mockMvc.perform(post("/api/v1/payments")
                             .contentType(MediaType.APPLICATION_JSON)
                             .header("Authorization", authToken)
                             .content(objectMapper.writeValueAsString(request)))
-                    .andExpect(status().isCreated())
-                    .andExpect(jsonPath("$.id").exists())
+                    .andExpect(status().isAccepted())
+                    .andExpect(jsonPath("$.workflowId").exists())
+                    .andExpect(jsonPath("$.status").value("PENDING"))
+                    .andReturn().getResponse().getContentAsString();
+
+            // Await workflow completion and verify payment persisted as COMPLETED
+            String workflowId = objectMapper.readTree(json).get("workflowId").asText();
+            PaymentCreationResult result = testEnv.getWorkflowClient()
+                    .newUntypedWorkflowStub(workflowId)
+                    .getResult(PaymentCreationResult.class);
+
+            mockMvc.perform(get("/api/v1/payments/" + result.getPaymentId())
+                            .header("Authorization", authToken))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.id").value(result.getPaymentId()))
                     .andExpect(jsonPath("$.status").value("COMPLETED"))
                     .andExpect(jsonPath("$.createdAt").exists());
         }
@@ -411,11 +429,21 @@ public class PaymentIntegrationTest {
             PaymentRequest request = createValidPaymentRequest();
             request.setDescription("Invoice #INV-2026-001");
 
-            mockMvc.perform(post("/api/v1/payments")
+            String json = mockMvc.perform(post("/api/v1/payments")
                             .contentType(MediaType.APPLICATION_JSON)
                             .header("Authorization", authToken)
                             .content(objectMapper.writeValueAsString(request)))
-                    .andExpect(status().isCreated())
+                    .andExpect(status().isAccepted())
+                    .andReturn().getResponse().getContentAsString();
+
+            String workflowId = objectMapper.readTree(json).get("workflowId").asText();
+            PaymentCreationResult result = testEnv.getWorkflowClient()
+                    .newUntypedWorkflowStub(workflowId)
+                    .getResult(PaymentCreationResult.class);
+
+            mockMvc.perform(get("/api/v1/payments/" + result.getPaymentId())
+                            .header("Authorization", authToken))
+                    .andExpect(status().isOk())
                     .andExpect(jsonPath("$.description").value("Invoice #INV-2026-001"));
         }
 
@@ -424,11 +452,21 @@ public class PaymentIntegrationTest {
         void testCreatePayment_withoutDescription_omitsField() throws Exception {
             PaymentRequest request = createValidPaymentRequest();
 
-            mockMvc.perform(post("/api/v1/payments")
+            String json = mockMvc.perform(post("/api/v1/payments")
                             .contentType(MediaType.APPLICATION_JSON)
                             .header("Authorization", authToken)
                             .content(objectMapper.writeValueAsString(request)))
-                    .andExpect(status().isCreated())
+                    .andExpect(status().isAccepted())
+                    .andReturn().getResponse().getContentAsString();
+
+            String workflowId = objectMapper.readTree(json).get("workflowId").asText();
+            PaymentCreationResult result = testEnv.getWorkflowClient()
+                    .newUntypedWorkflowStub(workflowId)
+                    .getResult(PaymentCreationResult.class);
+
+            mockMvc.perform(get("/api/v1/payments/" + result.getPaymentId())
+                            .header("Authorization", authToken))
+                    .andExpect(status().isOk())
                     .andExpect(jsonPath("$.description").doesNotExist());
         }
 
@@ -557,9 +595,13 @@ public class PaymentIntegrationTest {
                             .contentType(MediaType.APPLICATION_JSON)
                             .header("Authorization", userToken)
                             .content(objectMapper.writeValueAsString(request)))
-                    .andExpect(status().isCreated())
+                    .andExpect(status().isAccepted())
                     .andReturn().getResponse().getContentAsString();
-            String paymentId = objectMapper.readTree(responseJson).get("id").asText();
+            String workflowId = objectMapper.readTree(responseJson).get("workflowId").asText();
+            PaymentCreationResult r = testEnv.getWorkflowClient()
+                    .newUntypedWorkflowStub(workflowId)
+                    .getResult(PaymentCreationResult.class);
+            String paymentId = r.getPaymentId();
 
             // USER reads their own payment — must succeed
             mockMvc.perform(get("/api/v1/payments/" + paymentId)
@@ -586,9 +628,13 @@ public class PaymentIntegrationTest {
                             .contentType(MediaType.APPLICATION_JSON)
                             .header("Authorization", userToken)
                             .content(objectMapper.writeValueAsString(createValidPaymentRequest())))
-                    .andExpect(status().isCreated())
+                    .andExpect(status().isAccepted())
                     .andReturn().getResponse().getContentAsString();
-            String paymentId = objectMapper.readTree(responseJson).get("id").asText();
+            String wfId2 = objectMapper.readTree(responseJson).get("workflowId").asText();
+            PaymentCreationResult r2 = testEnv.getWorkflowClient()
+                    .newUntypedWorkflowStub(wfId2)
+                    .getResult(PaymentCreationResult.class);
+            String paymentId = r2.getPaymentId();
 
             // ADMIN reads user's payment — must succeed
             mockMvc.perform(get("/api/v1/payments/" + paymentId)
@@ -692,14 +738,17 @@ public class PaymentIntegrationTest {
     private String createPaymentAndGetId() throws Exception {
         PaymentRequest request = createValidPaymentRequest();
 
-        MvcResult result = mockMvc.perform(post("/api/v1/payments")
+        String json = mockMvc.perform(post("/api/v1/payments")
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", authToken)
                         .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isCreated())
-                .andReturn();
+                .andExpect(status().isAccepted())
+                .andReturn().getResponse().getContentAsString();
 
-        String responseJson = result.getResponse().getContentAsString();
-        return objectMapper.readTree(responseJson).get("id").asText();
+        String workflowId = objectMapper.readTree(json).get("workflowId").asText();
+        PaymentCreationResult result = testEnv.getWorkflowClient()
+                .newUntypedWorkflowStub(workflowId)
+                .getResult(PaymentCreationResult.class);
+        return result.getPaymentId();
     }
 }

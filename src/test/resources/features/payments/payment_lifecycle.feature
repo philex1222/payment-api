@@ -8,8 +8,10 @@ Feature: Payment Lifecycle
 
   Scenario: Create a payment — verify structure and account masking
     When I create a payment for 100 USD from "1234567890" to "0987654321"
-    Then the response status code is 201
-    And the payment status is "COMPLETED"
+    Then the response status code is 202
+    And the payment has an "workflowId" field
+    When I GET that payment by ID
+    Then the payment status is "COMPLETED"
     And the payment has an "id" field
     And account numbers are masked in the response
 

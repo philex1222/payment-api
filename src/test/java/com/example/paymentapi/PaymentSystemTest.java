@@ -9,8 +9,10 @@ import com.example.paymentapi.dto.PaymentResponse;
 import com.example.paymentapi.dto.ReversalRequest;
 import com.example.paymentapi.dto.RoleUpdateRequest;
 import com.example.paymentapi.service.BankingAPIServiceImpl;
+import com.example.paymentapi.temporal.dto.PaymentCreationResult;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.temporal.testing.TestWorkflowEnvironment;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -48,6 +50,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *
  * <p>These tests boot the full Spring context with H2 and exercise the
  * application through its HTTP API exactly as a real client would.
+ *
+ * <p>{@code @Transactional} rolls back changes made in the test thread (e.g. auth
+ * state changes).  Temporal activity commits in separate threads are not rolled
+ * back; count-based payment assertions therefore use ID-level checks rather than
+ * relying on a clean-slate payment count.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -61,6 +68,7 @@ public class PaymentSystemTest {
     @Autowired private ObjectMapper objectMapper;
     @Autowired private CacheManager cacheManager;
     @Autowired private BankingAPIServiceImpl bankingService;
+    @Autowired private TestWorkflowEnvironment testEnv;
 
     private String adminToken;
     private String userToken;
@@ -101,6 +109,11 @@ public class PaymentSystemTest {
         return "Bearer " + objectMapper.readValue(json, LoginResponse.class).getToken();
     }
 
+    /**
+     * Creates a payment via the Temporal workflow endpoint and awaits workflow
+     * completion in the {@link TestWorkflowEnvironment}.  Returns the persisted
+     * payment ID (not the workflow ID).
+     */
     private String createPayment(String token) throws Exception {
         return createPayment(token, BigDecimal.valueOf(100), "USD");
     }
@@ -112,9 +125,13 @@ public class PaymentSystemTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", token)
                         .content(objectMapper.writeValueAsString(req)))
-                .andExpect(status().isCreated())
+                .andExpect(status().isAccepted())
                 .andReturn().getResponse().getContentAsString();
-        return objectMapper.readTree(json).get("id").asText();
+        String workflowId = objectMapper.readTree(json).get("workflowId").asText();
+        PaymentCreationResult result = testEnv.getWorkflowClient()
+                .newUntypedWorkflowStub(workflowId)
+                .getResult(PaymentCreationResult.class);
+        return result.getPaymentId();
     }
 
     // ═════════════════════════════════════════════════════════════════════════
@@ -424,10 +441,9 @@ public class PaymentSystemTest {
         @Test
         @DisplayName("Idempotency key is accepted on payment creation")
         void idempotencyKeyAccepted() throws Exception {
-            // In test profile Redis is a no-op, so idempotency replay (Warning
-            // header + same ID) is not exercisable.  This test verifies that the
-            // Idempotency-Key header is accepted without error and payment creation
-            // succeeds.  Full replay behaviour is covered by IdempotencyServiceImplTest.
+            // In test profile Redis is a no-op, so idempotency replay is not exercisable.
+            // This test verifies that the Idempotency-Key header is accepted without error
+            // and payment creation returns 202 Accepted with a workflowId.
             String idempotencyKey = UUID.randomUUID().toString();
             PaymentRequest req = new PaymentRequest(
                     "1234567890", "0987654321", BigDecimal.valueOf(75), "USD", null);
@@ -438,34 +454,34 @@ public class PaymentSystemTest {
                             .header("Authorization", adminToken)
                             .header("Idempotency-Key", idempotencyKey)
                             .content(body))
-                    .andExpect(status().isCreated())
-                    .andExpect(jsonPath("$.id").isString());
+                    .andExpect(status().isAccepted())
+                    .andExpect(jsonPath("$.workflowId").isString());
         }
 
         @Test
-        @DisplayName("Different idempotency keys create separate payments")
+        @DisplayName("Different idempotency keys create separate workflows")
         void differentKeysCreateSeparatePayments() throws Exception {
             PaymentRequest req = new PaymentRequest(
                     "1234567890", "0987654321", BigDecimal.valueOf(50), "USD", null);
             String body = objectMapper.writeValueAsString(req);
 
-            String id1 = objectMapper.readTree(mockMvc.perform(post("/api/v1/payments")
+            String wfId1 = objectMapper.readTree(mockMvc.perform(post("/api/v1/payments")
                             .contentType(MediaType.APPLICATION_JSON)
                             .header("Authorization", adminToken)
                             .header("Idempotency-Key", UUID.randomUUID().toString())
                             .content(body))
-                    .andExpect(status().isCreated())
-                    .andReturn().getResponse().getContentAsString()).get("id").asText();
+                    .andExpect(status().isAccepted())
+                    .andReturn().getResponse().getContentAsString()).get("workflowId").asText();
 
-            String id2 = objectMapper.readTree(mockMvc.perform(post("/api/v1/payments")
+            String wfId2 = objectMapper.readTree(mockMvc.perform(post("/api/v1/payments")
                             .contentType(MediaType.APPLICATION_JSON)
                             .header("Authorization", adminToken)
                             .header("Idempotency-Key", UUID.randomUUID().toString())
                             .content(body))
-                    .andExpect(status().isCreated())
-                    .andReturn().getResponse().getContentAsString()).get("id").asText();
+                    .andExpect(status().isAccepted())
+                    .andReturn().getResponse().getContentAsString()).get("workflowId").asText();
 
-            assertNotEquals(id1, id2, "Different idempotency keys must create separate payments");
+            assertNotEquals(wfId1, wfId2, "Different idempotency keys must create separate workflows");
         }
     }
 
@@ -717,22 +733,25 @@ public class PaymentSystemTest {
         @Test
         @DisplayName("USER's payment list shows only their payments, not admin's")
         void userSeesOnlyOwnPayments() throws Exception {
-            // Admin creates 2 payments
-            createPayment(adminToken);
-            createPayment(adminToken);
+            // Admin creates 2 payments; user creates 1 payment
+            String adminPayment1 = createPayment(adminToken);
+            String adminPayment2 = createPayment(adminToken);
+            String userPayment   = createPayment(userToken);
 
-            // User creates 1 payment
-            createPayment(userToken);
-
-            // User's list should only contain their 1 payment
             String json = mockMvc.perform(get("/api/v1/payments?page=0&size=100")
                             .header("Authorization", userToken))
                     .andExpect(status().isOk())
                     .andReturn().getResponse().getContentAsString();
 
-            // VIA_DTO page serialization: pagination fields nested under "page" object
-            int totalElements = objectMapper.readTree(json).get("page").get("totalElements").asInt();
-            assertEquals(1, totalElements, "User should see only their own payments");
+            List<String> ids = new ArrayList<>();
+            objectMapper.readTree(json).get("content")
+                    .forEach(node -> ids.add(node.get("id").asText()));
+
+            // User must see their own payment
+            assertTrue(ids.contains(userPayment), "User must see their own payment");
+            // User must NOT see admin's payments
+            assertFalse(ids.contains(adminPayment1), "User must not see admin payment 1");
+            assertFalse(ids.contains(adminPayment2), "User must not see admin payment 2");
         }
 
         @Test
@@ -798,21 +817,32 @@ public class PaymentSystemTest {
         @Test
         @DisplayName("Create → view → view transactions → reverse → verify reversed")
         void fullLifecycleWithTransactions() throws Exception {
-            // Step 1: Create
+            // Step 1: POST → 202 Accepted; await workflow completion to get paymentId
             PaymentRequest req = new PaymentRequest(
                     "1234567890", "0987654321", BigDecimal.valueOf(200), "USD",
                     "Integration test payment");
-            String json = mockMvc.perform(post("/api/v1/payments")
+            String json202 = mockMvc.perform(post("/api/v1/payments")
                             .contentType(MediaType.APPLICATION_JSON)
                             .header("Authorization", adminToken)
                             .content(objectMapper.writeValueAsString(req)))
-                    .andExpect(status().isCreated())
-                    .andExpect(jsonPath("$.status").value("COMPLETED"))
-                    .andExpect(jsonPath("$.description").value("Integration test payment"))
+                    .andExpect(status().isAccepted())
+                    .andExpect(jsonPath("$.workflowId").isNotEmpty())
                     .andReturn().getResponse().getContentAsString();
-            String paymentId = objectMapper.readTree(json).get("id").asText();
 
-            // Step 2: View payment
+            String workflowId = objectMapper.readTree(json202).get("workflowId").asText();
+            PaymentCreationResult result = testEnv.getWorkflowClient()
+                    .newUntypedWorkflowStub(workflowId)
+                    .getResult(PaymentCreationResult.class);
+            String paymentId = result.getPaymentId();
+
+            // Verify persisted payment has correct details
+            mockMvc.perform(get("/api/v1/payments/" + paymentId)
+                            .header("Authorization", adminToken))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.status").value("COMPLETED"))
+                    .andExpect(jsonPath("$.description").value("Integration test payment"));
+
+            // Step 2: View payment — account masking and amount
             mockMvc.perform(get("/api/v1/payments/" + paymentId)
                             .header("Authorization", adminToken))
                     .andExpect(status().isOk())
@@ -916,7 +946,7 @@ public class PaymentSystemTest {
                                         .content(objectMapper.writeValueAsString(req)))
                                 .andReturn().getResponse().getStatus();
 
-                        if (status == 201) {
+                        if (status == 202) {
                             successCount.incrementAndGet();
                         } else {
                             errorCount.incrementAndGet();

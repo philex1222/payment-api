@@ -1,7 +1,9 @@
 package com.example.paymentapi;
 
+import com.example.paymentapi.temporal.config.TemporalProperties;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.data.web.config.EnableSpringDataWebSupport;
 
 import static org.springframework.data.web.config.EnableSpringDataWebSupport.PageSerializationMode.VIA_DTO;
@@ -18,6 +20,7 @@ import static org.springframework.data.web.config.EnableSpringDataWebSupport.Pag
  */
 @SpringBootApplication
 @EnableSpringDataWebSupport(pageSerializationMode = VIA_DTO)
+@EnableConfigurationProperties(TemporalProperties.class)
 public class PaymentApplication {
     public static void main(String[] args) {
         SpringApplication.run(PaymentApplication.class, args);

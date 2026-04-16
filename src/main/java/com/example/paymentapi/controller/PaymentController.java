@@ -8,21 +8,26 @@ import com.example.paymentapi.dto.TransactionResponse;
 import com.example.paymentapi.service.IdempotencyService;
 import com.example.paymentapi.service.TransactionService;
 import com.example.paymentapi.service.command.CancellationHandler;
-import com.example.paymentapi.service.command.CreatePaymentHandler;
 import com.example.paymentapi.service.command.PaymentLifecycleHandler;
 import com.example.paymentapi.service.command.ReversalHandler;
 import com.example.paymentapi.service.query.PaymentQueryService;
+import com.example.paymentapi.service.shared.PaymentSecurityHelper;
+import com.example.paymentapi.temporal.config.TemporalProperties;
+import com.example.paymentapi.temporal.dto.PaymentWorkflowResponse;
+import com.example.paymentapi.temporal.workflow.PaymentCreationWorkflow;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import io.temporal.client.WorkflowClient;
+import io.temporal.client.WorkflowOptions;
+import io.temporal.client.WorkflowStub;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.format.annotation.DateTimeFormat;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -32,6 +37,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/payments")
@@ -42,7 +48,9 @@ public class PaymentController {
 
     static final String IDEMPOTENCY_KEY_HEADER = "Idempotency-Key";
 
-    private final CreatePaymentHandler createHandler;
+    private final WorkflowClient workflowClient;
+    private final TemporalProperties temporalProperties;
+    private final PaymentSecurityHelper security;
     private final ReversalHandler reversalHandler;
     private final CancellationHandler cancellationHandler;
     private final PaymentLifecycleHandler lifecycleHandler;
@@ -50,14 +58,18 @@ public class PaymentController {
     private final IdempotencyService idempotencyService;
     private final TransactionService transactionService;
 
-    public PaymentController(CreatePaymentHandler createHandler,
+    public PaymentController(WorkflowClient workflowClient,
+                             TemporalProperties temporalProperties,
+                             PaymentSecurityHelper security,
                              ReversalHandler reversalHandler,
                              CancellationHandler cancellationHandler,
                              PaymentLifecycleHandler lifecycleHandler,
                              PaymentQueryService queryService,
                              IdempotencyService idempotencyService,
                              TransactionService transactionService) {
-        this.createHandler = createHandler;
+        this.workflowClient = workflowClient;
+        this.temporalProperties = temporalProperties;
+        this.security = security;
         this.reversalHandler = reversalHandler;
         this.cancellationHandler = cancellationHandler;
         this.lifecycleHandler = lifecycleHandler;
@@ -68,33 +80,48 @@ public class PaymentController {
 
     @PostMapping
     @Operation(summary = "Create a new payment",
-               description = "Optionally supply an 'Idempotency-Key' header to prevent duplicate charges on network retries.")
+               description = "Starts a durable Temporal workflow. Returns 202 Accepted + workflowId. "
+                           + "Poll GET /api/v1/payments/{paymentId} until status leaves PENDING. "
+                           + "Optionally supply an 'Idempotency-Key' header to prevent duplicate charges.")
     @ApiResponses({
-        @ApiResponse(responseCode = "201", description = "Payment created successfully"),
+        @ApiResponse(responseCode = "202", description = "Payment workflow started"),
         @ApiResponse(responseCode = "400", description = "Invalid payment request"),
         @ApiResponse(responseCode = "500", description = "Internal server error")
     })
-    public ResponseEntity<PaymentResponse> createPayment(
+    public ResponseEntity<PaymentWorkflowResponse> createPayment(
             @Parameter(description = "Client-generated unique key to prevent duplicate payments (UUID recommended)")
             @RequestHeader(value = IDEMPOTENCY_KEY_HEADER, required = false) String idempotencyKey,
             @Valid @RequestBody PaymentRequest paymentRequest) {
 
+        if (paymentRequest.getSourceAccount().equals(paymentRequest.getDestinationAccount())) {
+            throw new IllegalArgumentException("Source and destination accounts must differ");
+        }
+
         if (idempotencyKey != null && !idempotencyKey.isBlank()) {
-            Optional<PaymentResponse> cached = idempotencyService.get(idempotencyKey);
+            Optional<PaymentWorkflowResponse> cached = idempotencyService.get(idempotencyKey);
             if (cached.isPresent()) {
-                return ResponseEntity.status(HttpStatus.CREATED)
-                        .header(HttpHeaders.WARNING, "299 - \"Idempotency-Replayed\"")
-                        .body(cached.get());
+                return ResponseEntity.status(HttpStatus.ACCEPTED).body(cached.get());
             }
         }
 
-        PaymentResponse response = createHandler.handle(paymentRequest);
+        String workflowId = "payment-" + UUID.randomUUID();
+        String initiatedBy = security.currentUsername();
+
+        WorkflowStub stub = workflowClient.newUntypedWorkflowStub(
+                PaymentCreationWorkflow.class.getSimpleName(),
+                WorkflowOptions.newBuilder()
+                        .setTaskQueue(temporalProperties.getTaskQueue())
+                        .setWorkflowId(workflowId)
+                        .build());
+        stub.start(paymentRequest, initiatedBy);
+
+        PaymentWorkflowResponse wfResponse = new PaymentWorkflowResponse(workflowId, "PENDING", null);
 
         if (idempotencyKey != null && !idempotencyKey.isBlank()) {
-            idempotencyService.store(idempotencyKey, response);
+            idempotencyService.store(idempotencyKey, wfResponse);
         }
 
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(wfResponse);
     }
 
     @GetMapping("/{id}")
@@ -205,7 +232,7 @@ public class PaymentController {
     public ResponseEntity<List<TransactionResponse>> getTransactionsByPaymentId(
             @Parameter(description = "Payment UUID", required = true)
             @PathVariable String id) {
-        queryService.findById(id); // enforces ownership
+        queryService.findById(id);
         List<TransactionResponse> txns = transactionService.getTransactionsByPaymentId(id)
                 .stream()
                 .map(TransactionResponse::from)

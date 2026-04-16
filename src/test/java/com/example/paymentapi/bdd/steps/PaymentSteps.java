@@ -1,12 +1,14 @@
 package com.example.paymentapi.bdd.steps;
 
 import com.example.paymentapi.bdd.ScenarioContext;
+import com.example.paymentapi.temporal.dto.PaymentCreationResult;
 import io.cucumber.java.en.And;
 import io.cucumber.java.en.Given;
 import io.cucumber.java.en.Then;
 import io.cucumber.java.en.When;
 import io.restassured.http.ContentType;
 import io.restassured.response.Response;
+import io.temporal.testing.TestWorkflowEnvironment;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.List;
@@ -24,6 +26,9 @@ public class PaymentSteps {
     @Autowired
     private ScenarioContext ctx;
 
+    @Autowired
+    private TestWorkflowEnvironment testEnv;
+
     // ── Payment creation ───────────────────────────────────────────────────────
 
     @When("I create a payment for {int} {word} from {string} to {string}")
@@ -38,8 +43,12 @@ public class PaymentSteps {
             .when()
                 .post("/api/v1/payments");
         ctx.setLastResponse(response);
-        if (response.getStatusCode() == 201) {
-            ctx.setLastPaymentId(response.path("id"));
+        if (response.getStatusCode() == 202) {
+            String workflowId = response.path("workflowId");
+            PaymentCreationResult result = testEnv.getWorkflowClient()
+                    .newUntypedWorkflowStub(workflowId)
+                    .getResult(PaymentCreationResult.class);
+            ctx.setLastPaymentId(result.getPaymentId());
         }
     }
 
@@ -55,7 +64,7 @@ public class PaymentSteps {
                 .statusCode(200)
                 .extract().path("token");
 
-        String paymentId = given()
+        String workflowId = given()
                 .contentType(ContentType.JSON)
                 .header("Authorization", "Bearer " + token)
                 .body("""
@@ -65,15 +74,19 @@ public class PaymentSteps {
             .when()
                 .post("/api/v1/payments")
             .then()
-                .statusCode(201)
-                .extract().path("id");
-        ctx.setLastPaymentId(paymentId);
+                .statusCode(202)
+                .extract().path("workflowId");
+
+        PaymentCreationResult result = testEnv.getWorkflowClient()
+                .newUntypedWorkflowStub(workflowId)
+                .getResult(PaymentCreationResult.class);
+        ctx.setLastPaymentId(result.getPaymentId());
     }
 
     @Then("the payment is created successfully")
     public void paymentCreatedSuccessfully() {
-        assertEquals(201, ctx.getLastResponse().getStatusCode(),
-                "Expected 201 Created but got " + ctx.getLastResponse().getStatusCode());
+        assertEquals(202, ctx.getLastResponse().getStatusCode(),
+                "Expected 202 Accepted but got " + ctx.getLastResponse().getStatusCode());
         assertNotNull(ctx.getLastPaymentId(), "Payment ID must be set after creation");
     }
 
@@ -165,14 +178,12 @@ public class PaymentSteps {
 
     @Then("only one payment exists with that idempotency key")
     public void onlyOnePaymentWithKey() {
-        // Both requests should succeed (200 or 201). Verify they return the same payment ID.
-        // The second call should return the cached response (same id), not a new payment.
+        // Both requests should succeed with 202. Verify the response carries a workflowId.
         Response secondResponse = ctx.getLastResponse();
-        assertTrue(secondResponse.getStatusCode() == 200 || secondResponse.getStatusCode() == 201,
-                "Expected 200 or 201 for idempotent request, got " + secondResponse.getStatusCode());
-        // The second response carries the original payment ID — verify it is a valid non-empty string
-        String id = secondResponse.path("id");
-        assertNotNull(id, "Second idempotent response must return the original payment id");
+        assertTrue(secondResponse.getStatusCode() == 202 || secondResponse.getStatusCode() == 200,
+                "Expected 202 or 200 for idempotent request, got " + secondResponse.getStatusCode());
+        String workflowId = secondResponse.path("workflowId");
+        assertNotNull(workflowId, "Second idempotent response must return a workflowId");
     }
 
     // ── Assertions ─────────────────────────────────────────────────────────────

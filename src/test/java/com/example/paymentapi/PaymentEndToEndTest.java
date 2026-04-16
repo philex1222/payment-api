@@ -2,6 +2,9 @@ package com.example.paymentapi;
 
 import com.example.paymentapi.config.TestConfig;
 import com.example.paymentapi.dto.*;
+import com.example.paymentapi.temporal.dto.PaymentCreationResult;
+import com.example.paymentapi.temporal.dto.PaymentWorkflowResponse;
+import io.temporal.testing.TestWorkflowEnvironment;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -29,9 +32,28 @@ public class PaymentEndToEndTest {
     @Autowired
     private TestRestTemplate restTemplate;
 
+    @Autowired
+    private TestWorkflowEnvironment testEnv;
+
     private String baseUrl;
     private String authToken;
     private static String createdPaymentId;
+
+    private String createPaymentAndAwaitId(PaymentRequest request) {
+        ResponseEntity<PaymentWorkflowResponse> response = restTemplate.exchange(
+                baseUrl + "/api/v1/payments",
+                HttpMethod.POST,
+                new HttpEntity<>(request, createAuthHeaders()),
+                PaymentWorkflowResponse.class
+        );
+        assertEquals(HttpStatus.ACCEPTED, response.getStatusCode());
+        assertNotNull(response.getBody());
+        String workflowId = response.getBody().workflowId();
+        PaymentCreationResult result = testEnv.getWorkflowClient()
+                .newUntypedWorkflowStub(workflowId)
+                .getResult(PaymentCreationResult.class);
+        return result.getPaymentId();
+    }
 
     @BeforeEach
     public void setUp() {
@@ -131,20 +153,17 @@ public class PaymentEndToEndTest {
             request.setAmount(BigDecimal.valueOf(100));
             request.setCurrency("USD");
 
-            ResponseEntity<PaymentResponse> response = restTemplate.exchange(
-                    baseUrl + "/api/v1/payments",
-                    HttpMethod.POST,
-                    new HttpEntity<>(request, createAuthHeaders()),
+            createdPaymentId = createPaymentAndAwaitId(request);
+
+            ResponseEntity<PaymentResponse> getResponse = restTemplate.exchange(
+                    baseUrl + "/api/v1/payments/" + createdPaymentId,
+                    HttpMethod.GET,
+                    new HttpEntity<>(createAuthHeaders()),
                     PaymentResponse.class
             );
-
-            assertEquals(HttpStatus.CREATED, response.getStatusCode());
-            assertNotNull(response.getBody());
-            assertNotNull(response.getBody().getId());
-            assertEquals("COMPLETED", response.getBody().getStatus());
-            assertNotNull(response.getBody().getCreatedAt());
-
-            createdPaymentId = response.getBody().getId();
+            assertEquals(HttpStatus.OK, getResponse.getStatusCode());
+            assertEquals("COMPLETED", getResponse.getBody().getStatus());
+            assertNotNull(getResponse.getBody().getCreatedAt());
         }
 
         @Test
@@ -319,14 +338,7 @@ public class PaymentEndToEndTest {
             request.setAmount(BigDecimal.valueOf(50));
             request.setCurrency("USD");
 
-            ResponseEntity<PaymentResponse> createResponse = restTemplate.exchange(
-                    baseUrl + "/api/v1/payments",
-                    HttpMethod.POST,
-                    new HttpEntity<>(request, createAuthHeaders()),
-                    PaymentResponse.class
-            );
-
-            String paymentId = createResponse.getBody().getId();
+            String paymentId = createPaymentAndAwaitId(request);
 
             // Try invalid transition: COMPLETED -> PENDING
             PaymentStatusRequest statusRequest = new PaymentStatusRequest();
@@ -392,14 +404,7 @@ public class PaymentEndToEndTest {
                 request.setAmount(BigDecimal.valueOf(10 * (i + 1)));
                 request.setCurrency("USD");
 
-                ResponseEntity<PaymentResponse> response = restTemplate.exchange(
-                        baseUrl + "/api/v1/payments",
-                        HttpMethod.POST,
-                        new HttpEntity<>(request, createAuthHeaders()),
-                        PaymentResponse.class
-                );
-
-                assertEquals(HttpStatus.CREATED, response.getStatusCode());
+                createPaymentAndAwaitId(request);
             }
 
             // Retrieve all payments
@@ -425,12 +430,7 @@ public class PaymentEndToEndTest {
             request.setAmount(BigDecimal.valueOf(25));
             request.setCurrency("USD");
 
-            restTemplate.exchange(
-                    baseUrl + "/api/v1/payments",
-                    HttpMethod.POST,
-                    new HttpEntity<>(request, createAuthHeaders()),
-                    PaymentResponse.class
-            );
+            createPaymentAndAwaitId(request);
 
             // Get payments by source account
             ResponseEntity<String> response = restTemplate.exchange(
@@ -458,14 +458,7 @@ public class PaymentEndToEndTest {
             request.setAmount(BigDecimal.valueOf(100));
             request.setCurrency("USD");
 
-            ResponseEntity<PaymentResponse> createResponse = restTemplate.exchange(
-                    baseUrl + "/api/v1/payments",
-                    HttpMethod.POST,
-                    new HttpEntity<>(request, createAuthHeaders()),
-                    PaymentResponse.class
-            );
-
-            String paymentId = createResponse.getBody().getId();
+            String paymentId = createPaymentAndAwaitId(request);
 
             // Request partial refund
             ReversalRequest reversalRequest = new ReversalRequest();

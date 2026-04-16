@@ -2,10 +2,12 @@ package com.example.paymentapi;
 
 import com.example.paymentapi.config.TestConfig;
 import com.example.paymentapi.service.BankingAPIServiceImpl;
+import com.example.paymentapi.temporal.dto.PaymentCreationResult;
 import io.restassured.RestAssured;
 import io.restassured.http.ContentType;
 import io.restassured.response.Response;
 import io.restassured.specification.RequestSpecification;
+import io.temporal.testing.TestWorkflowEnvironment;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -50,6 +52,16 @@ class PaymentApiRestAssuredTest {
     @Autowired
     private CacheManager cacheManager;
 
+    @Autowired
+    private TestWorkflowEnvironment testEnv;
+
+    private String awaitPaymentId(String workflowId) {
+        PaymentCreationResult result = testEnv.getWorkflowClient()
+                .newUntypedWorkflowStub(workflowId)
+                .getResult(PaymentCreationResult.class);
+        return result.getPaymentId();
+    }
+
     @BeforeEach
     void setUp() {
         RestAssured.port = port;
@@ -88,15 +100,16 @@ class PaymentApiRestAssuredTest {
     }
 
     private String createPaymentReturningId(RequestSpecification spec) {
-        return spec
+        String workflowId = spec
                 .body("""
                     {"sourceAccount":"1234567890","destinationAccount":"0987654321",
                      "amount":50,"currency":"USD"}""")
             .when()
                 .post("/api/v1/payments")
             .then()
-                .statusCode(201)
-                .extract().path("id");
+                .statusCode(202)
+                .extract().path("workflowId");
+        return awaitPaymentId(workflowId);
     }
 
     // ═════════════════════════════════════════════════════════════════════════
@@ -421,24 +434,22 @@ class PaymentApiRestAssuredTest {
         @Test
         @DisplayName("Create → Get → List — full lifecycle validates against JSON schemas")
         void fullCrudLifecycle() {
-            // CREATE
-            String paymentId = asAdmin()
+            // CREATE — returns 202 with workflowId
+            String workflowId = asAdmin()
                 .body("""
                     {"sourceAccount":"1234567890","destinationAccount":"0987654321",
                      "amount":100.50,"currency":"USD","description":"REST Assured test"}""")
             .when()
                 .post("/api/v1/payments")
             .then()
-                .statusCode(201)
-                .body(matchesJsonSchemaInClasspath("schemas/payment-response.json"))
-                .body("status", equalTo("COMPLETED"))
-                .body("sourceAccount", startsWith("******"))
-                .body("amount", equalTo(100.50f))
-                .body("currency", equalTo("USD"))
-                .body("description", equalTo("REST Assured test"))
-                .extract().path("id");
+                .statusCode(202)
+                .body("workflowId", notNullValue())
+                .body("status", equalTo("PENDING"))
+                .extract().path("workflowId");
 
-            // GET by ID
+            String paymentId = awaitPaymentId(workflowId);
+
+            // GET by ID — verifies workflow completed and persisted correctly
             asAdmin()
             .when()
                 .get("/api/v1/payments/{id}", paymentId)
@@ -446,7 +457,11 @@ class PaymentApiRestAssuredTest {
                 .statusCode(200)
                 .body(matchesJsonSchemaInClasspath("schemas/payment-response.json"))
                 .body("id", equalTo(paymentId))
-                .body("status", equalTo("COMPLETED"));
+                .body("status", equalTo("COMPLETED"))
+                .body("sourceAccount", startsWith("******"))
+                .body("amount", equalTo(100.50f))
+                .body("currency", equalTo("USD"))
+                .body("description", equalTo("REST Assured test"));
 
             // LIST (paginated)
             asAdmin()
@@ -515,15 +530,23 @@ class PaymentApiRestAssuredTest {
         @Test
         @DisplayName("Multi-currency payment (EUR) succeeds — service converts to USD")
         void multiCurrencyPayment() {
-            asAdmin()
+            String workflowId = asAdmin()
                 .body("""
                     {"sourceAccount":"1234567890","destinationAccount":"0987654321",
                      "amount":250.75,"currency":"EUR"}""")
             .when()
                 .post("/api/v1/payments")
             .then()
-                .statusCode(201)
-                .body("id", notNullValue())
+                .statusCode(202)
+                .body("workflowId", notNullValue())
+                .extract().path("workflowId");
+
+            String paymentId = awaitPaymentId(workflowId);
+            asAdmin()
+            .when()
+                .get("/api/v1/payments/{id}", paymentId)
+            .then()
+                .statusCode(200)
                 .body("status", equalTo("COMPLETED"));
         }
     }
@@ -826,8 +849,8 @@ class PaymentApiRestAssuredTest {
             .when()
                 .post("/api/v1/payments")
             .then()
-                .statusCode(201)
-                .body("id", notNullValue());
+                .statusCode(202)
+                .body("workflowId", notNullValue());
         }
 
         @Test
@@ -837,25 +860,25 @@ class PaymentApiRestAssuredTest {
                 {"sourceAccount":"1234567890","destinationAccount":"0987654321",
                  "amount":30,"currency":"USD"}""";
 
-            String id1 = asAdmin()
+            String wf1 = asAdmin()
                 .header("Idempotency-Key", UUID.randomUUID().toString())
                 .body(body)
             .when()
                 .post("/api/v1/payments")
             .then()
-                .statusCode(201)
-                .extract().path("id");
+                .statusCode(202)
+                .extract().path("workflowId");
 
-            String id2 = asAdmin()
+            String wf2 = asAdmin()
                 .header("Idempotency-Key", UUID.randomUUID().toString())
                 .body(body)
             .when()
                 .post("/api/v1/payments")
             .then()
-                .statusCode(201)
-                .extract().path("id");
+                .statusCode(202)
+                .extract().path("workflowId");
 
-            org.junit.jupiter.api.Assertions.assertNotEquals(id1, id2);
+            org.junit.jupiter.api.Assertions.assertNotEquals(wf1, wf2);
         }
     }
 
@@ -1007,7 +1030,7 @@ class PaymentApiRestAssuredTest {
             .when()
                 .post("/api/v1/payments")
             .then()
-                .statusCode(201)
+                .statusCode(202)
                 .time(lessThan(3000L));
         }
 

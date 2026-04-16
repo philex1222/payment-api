@@ -1,5 +1,6 @@
 package com.example.paymentapi.config;
 
+import com.example.paymentapi.temporal.config.TemporalTestConfig;
 import org.apache.hc.client5.http.classic.HttpClient;
 import org.apache.hc.client5.http.impl.classic.HttpClients;
 import org.springframework.boot.test.context.TestConfiguration;
@@ -7,6 +8,7 @@ import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.concurrent.ConcurrentMapCacheManager;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
@@ -14,8 +16,10 @@ import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
 
 /**
  * Test-scoped overrides: in-memory cache, no-op Redis, Apache HttpClient 5 for PATCH support.
+ * Also imports TemporalTestConfig which registers TestWorkflowEnvironment as the WorkflowClient.
  */
 @TestConfiguration
+@Import(TemporalTestConfig.class)
 public class TestConfig {
 
     @Bean

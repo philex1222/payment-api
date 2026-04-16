@@ -1,6 +1,6 @@
 package com.example.paymentapi.service;
 
-import com.example.paymentapi.dto.PaymentResponse;
+import com.example.paymentapi.temporal.dto.PaymentWorkflowResponse;
 
 import java.util.Optional;
 
@@ -13,15 +13,7 @@ import java.util.Optional;
  */
 public interface IdempotencyService {
 
-    /**
-     * Returns the previously stored response for the given key, or empty if this
-     * is the first time the key has been seen.
-     */
-    Optional<PaymentResponse> get(String idempotencyKey);
+    Optional<PaymentWorkflowResponse> get(String idempotencyKey);
 
-    /**
-     * Persists the response so it can be replayed on duplicate requests.
-     * The entry expires automatically after 24 hours.
-     */
-    void store(String idempotencyKey, PaymentResponse response);
+    void store(String idempotencyKey, PaymentWorkflowResponse response);
 }

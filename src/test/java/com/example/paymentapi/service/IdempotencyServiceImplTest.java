@@ -1,6 +1,6 @@
 package com.example.paymentapi.service;
 
-import com.example.paymentapi.dto.PaymentResponse;
+import com.example.paymentapi.temporal.dto.PaymentWorkflowResponse;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -15,7 +15,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 
-import java.math.BigDecimal;
 import java.time.Duration;
 import java.util.Optional;
 
@@ -45,13 +44,13 @@ class IdempotencyServiceImplTest {
 
         @Test
         void get_whenKeyExists_returnsDeserializedResponse() throws Exception {
-            PaymentResponse expected = PaymentResponse.builder()
-                    .id("pay-1").status("COMPLETED").amount(BigDecimal.TEN).build();
-            String json = "{\"id\":\"pay-1\"}";
+            PaymentWorkflowResponse expected =
+                    new PaymentWorkflowResponse("wf-1", "PENDING", null);
+            String json = "{\"workflowId\":\"wf-1\"}";
             when(valueOps.get(REDIS_KEY)).thenReturn(json);
-            when(objectMapper.readValue(json, PaymentResponse.class)).thenReturn(expected);
+            when(objectMapper.readValue(json, PaymentWorkflowResponse.class)).thenReturn(expected);
 
-            Optional<PaymentResponse> result = idempotencyService.get(KEY);
+            Optional<PaymentWorkflowResponse> result = idempotencyService.get(KEY);
 
             assertThat(result).isPresent().contains(expected);
         }
@@ -73,7 +72,7 @@ class IdempotencyServiceImplTest {
         @Test
         void get_whenDeserializationFails_returnsEmpty() throws Exception {
             when(valueOps.get(REDIS_KEY)).thenReturn("{bad-json}");
-            when(objectMapper.readValue("{bad-json}", PaymentResponse.class))
+            when(objectMapper.readValue("{bad-json}", PaymentWorkflowResponse.class))
                     .thenThrow(mock(JsonProcessingException.class));
 
             assertThat(idempotencyService.get(KEY)).isEmpty();
@@ -86,8 +85,9 @@ class IdempotencyServiceImplTest {
 
         @Test
         void store_serialisesAndSetsWithTTL() throws Exception {
-            PaymentResponse response = PaymentResponse.builder().id("pay-1").build();
-            String json = "{\"id\":\"pay-1\"}";
+            PaymentWorkflowResponse response =
+                    new PaymentWorkflowResponse("wf-1", "PENDING", null);
+            String json = "{\"workflowId\":\"wf-1\"}";
             when(objectMapper.writeValueAsString(response)).thenReturn(json);
 
             idempotencyService.store(KEY, response);
@@ -97,7 +97,8 @@ class IdempotencyServiceImplTest {
 
         @Test
         void store_whenRedisThrows_doesNotPropagateException() throws Exception {
-            PaymentResponse response = PaymentResponse.builder().id("pay-1").build();
+            PaymentWorkflowResponse response =
+                    new PaymentWorkflowResponse("wf-1", "PENDING", null);
             when(objectMapper.writeValueAsString(response)).thenReturn("{}");
             doThrow(new RuntimeException("Redis down")).when(valueOps)
                     .set(anyString(), anyString(), any(Duration.class));
@@ -108,7 +109,8 @@ class IdempotencyServiceImplTest {
 
         @Test
         void store_whenSerializationFails_doesNotPropagateException() throws Exception {
-            PaymentResponse response = PaymentResponse.builder().id("pay-1").build();
+            PaymentWorkflowResponse response =
+                    new PaymentWorkflowResponse("wf-1", "PENDING", null);
             // doThrow is more reliable than when().thenThrow() for checked exceptions
             doThrow(new RuntimeException("serialization failed"))
                     .when(objectMapper).writeValueAsString(any());

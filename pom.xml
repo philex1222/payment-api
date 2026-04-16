@@ -57,6 +57,7 @@
           Same major version — API-compatible.
         -->
         <httpclient5.version>5.6</httpclient5.version>
+        <temporal.version>1.26.1</temporal.version>
     </properties>
 
     <dependencyManagement>
@@ -205,6 +206,13 @@
             <version>9.0</version>
         </dependency>
 
+        <!-- Temporal — durable workflow orchestration -->
+        <dependency>
+            <groupId>io.temporal</groupId>
+            <artifactId>temporal-sdk</artifactId>
+            <version>${temporal.version}</version>
+        </dependency>
+
         <!-- Flyway database migrations (flyway-mysql required for Flyway 10+) -->
         <dependency>
             <groupId>org.flywaydb</groupId>
@@ -235,6 +243,13 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- Temporal testing support (TestWorkflowEnvironment, TestWorkflowExtension) -->
+        <dependency>
+            <groupId>io.temporal</groupId>
+            <artifactId>temporal-testing</artifactId>
+            <version>${temporal.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
