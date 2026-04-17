@@ -204,4 +204,89 @@ class WebhookServiceImplTest {
 
         assertThat(updated.isActive()).isFalse();
     }
+
+    @Test
+    void createSubscription_malformedUrl_throwsIllegalArgument() {
+        WebhookSubscriptionRequest req = WebhookSubscriptionRequest.builder()
+                .targetUrl("ht!tp://bad url with spaces")
+                .bearerToken("tok")
+                .eventTypes(List.of("PAYMENT_COMPLETED"))
+                .build();
+        assertThatThrownBy(() -> webhookService.createSubscription(req, "user"))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void createSubscription_blankHost_throwsIllegalArgument() {
+        WebhookSubscriptionRequest req = WebhookSubscriptionRequest.builder()
+                .targetUrl("http:///path-with-no-host")
+                .bearerToken("tok")
+                .eventTypes(List.of("PAYMENT_COMPLETED"))
+                .build();
+        assertThatThrownBy(() -> webhookService.createSubscription(req, "user"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("valid host");
+    }
+
+    @Test
+    void createSubscription_unresolvableHost_throwsIllegalArgument() {
+        WebhookSubscriptionRequest req = WebhookSubscriptionRequest.builder()
+                .targetUrl("http://nonexistent.invalid.tld.example/hook")
+                .bearerToken("tok")
+                .eventTypes(List.of("PAYMENT_COMPLETED"))
+                .build();
+        assertThatThrownBy(() -> webhookService.createSubscription(req, "user"))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void updateSubscription_adminScope_rejectedForNonAdmin() {
+        WebhookSubscriptionRequest req = WebhookSubscriptionRequest.builder()
+                .targetUrl("http://example.com/hook")
+                .bearerToken("tok")
+                .eventTypes(List.of("PAYMENT_COMPLETED"))
+                .build();
+        WebhookSubscriptionResponse created = webhookService.createSubscription(req, "user");
+
+        WebhookSubscriptionRequest update = WebhookSubscriptionRequest.builder()
+                .targetUrl("http://example.com/hook")
+                .bearerToken("tok")
+                .eventTypes(List.of("PAYMENT_COMPLETED"))
+                .adminScope(true)
+                .build();
+
+        assertThatThrownBy(() ->
+                webhookService.updateSubscription(created.getId(), update, "user", false))
+                .isInstanceOf(AccessDeniedException.class);
+    }
+
+    @Test
+    void getDeliveries_unknownSubscription_throwsNotFound() {
+        assertThatThrownBy(() -> webhookService.getDeliveries("does-not-exist"))
+                .isInstanceOf(WebhookSubscriptionNotFoundException.class);
+    }
+
+    @Test
+    void getDeliveries_returnsEmptyListForSubscriptionWithoutDeliveries() {
+        WebhookSubscriptionRequest req = WebhookSubscriptionRequest.builder()
+                .targetUrl("http://example.com/hook")
+                .bearerToken("tok")
+                .eventTypes(List.of("PAYMENT_COMPLETED"))
+                .build();
+        WebhookSubscriptionResponse created = webhookService.createSubscription(req, "user");
+        assertThat(webhookService.getDeliveries(created.getId())).isEmpty();
+    }
+
+    @Test
+    void deleteSubscription_crossUser_throwsAccessDenied() {
+        WebhookSubscriptionRequest req = WebhookSubscriptionRequest.builder()
+                .targetUrl("http://example.com/hook")
+                .bearerToken("tok")
+                .eventTypes(List.of("PAYMENT_COMPLETED"))
+                .build();
+        WebhookSubscriptionResponse created = webhookService.createSubscription(req, "admin");
+
+        assertThatThrownBy(() -> webhookService.deleteSubscription(created.getId(), "user", false))
+                .isInstanceOf(AccessDeniedException.class);
+    }
 }

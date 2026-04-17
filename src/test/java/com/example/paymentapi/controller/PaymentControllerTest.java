@@ -198,4 +198,163 @@ public class PaymentControllerTest {
                         .header("Authorization", token))
                 .andExpect(status().isOk());
     }
+
+    @Test
+    public void testCreatePayment_selfTransfer_returnsBadRequest() throws Exception {
+        PaymentRequest r = new PaymentRequest();
+        r.setSourceAccount("SAME");
+        r.setDestinationAccount("SAME");
+        r.setAmount(BigDecimal.valueOf(100));
+        r.setCurrency("USD");
+
+        mockMvc.perform(post("/api/v1/payments")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", token)
+                        .content(objectMapper.writeValueAsString(r)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    public void testGetPayments_amountFromGreaterThanAmountTo_returnsBadRequest() throws Exception {
+        mockMvc.perform(get("/api/v1/payments")
+                        .param("amountFrom", "500")
+                        .param("amountTo", "100")
+                        .header("Authorization", token))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    public void testGetPaymentsBySourceAccount_returnsList() throws Exception {
+        PaymentResponse pr = new PaymentResponse();
+        pr.setId("p-1");
+        when(queryService.findBySourceAccount("SRC")).thenReturn(List.of(pr));
+        mockMvc.perform(get("/api/v1/payments/source-account")
+                        .param("sourceAccount", "SRC")
+                        .header("Authorization", token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value("p-1"));
+    }
+
+    @Test
+    public void testGetPaymentsByDestinationAccount_returnsList() throws Exception {
+        PaymentResponse pr = new PaymentResponse();
+        pr.setId("p-2");
+        when(queryService.findByDestinationAccount("DST")).thenReturn(List.of(pr));
+        mockMvc.perform(get("/api/v1/payments/destination-account")
+                        .param("destinationAccount", "DST")
+                        .header("Authorization", token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value("p-2"));
+    }
+
+    @Test
+    public void testUpdatePaymentStatus_returnsUpdated() throws Exception {
+        PaymentResponse pr = new PaymentResponse();
+        pr.setId("p-1");
+        pr.setStatus("COMPLETED");
+        when(lifecycleHandler.updateStatus(eq("p-1"), eq("COMPLETED"))).thenReturn(pr);
+
+        mockMvc.perform(patch("/api/v1/payments/p-1/status")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", token)
+                        .content("{\"status\":\"COMPLETED\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("COMPLETED"));
+    }
+
+    @Test
+    public void testCancelPayment_returnsOk() throws Exception {
+        PaymentResponse pr = new PaymentResponse();
+        pr.setId("p-1");
+        pr.setStatus("CANCELLED");
+        when(cancellationHandler.handle("p-1")).thenReturn(pr);
+
+        mockMvc.perform(post("/api/v1/payments/p-1/cancel")
+                        .header("Authorization", token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CANCELLED"));
+    }
+
+    @Test
+    public void testDeletePayment_returnsNoContent() throws Exception {
+        mockMvc.perform(delete("/api/v1/payments/p-1")
+                        .header("Authorization", token))
+                .andExpect(status().isNoContent());
+        verify(lifecycleHandler).delete("p-1");
+    }
+
+    @Test
+    public void testRetryPayment_returnsOk() throws Exception {
+        PaymentResponse pr = new PaymentResponse();
+        pr.setId("p-1");
+        pr.setStatus("PROCESSING");
+        when(lifecycleHandler.retry("p-1")).thenReturn(pr);
+
+        mockMvc.perform(post("/api/v1/payments/p-1/retry")
+                        .header("Authorization", token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("PROCESSING"));
+    }
+
+    @Test
+    public void testInitiatePaymentReversal_returnsOk() throws Exception {
+        PaymentResponse pr = new PaymentResponse();
+        pr.setId("p-1");
+        pr.setStatus("REVERSED");
+        when(reversalHandler.handle(eq("p-1"), any())).thenReturn(pr);
+
+        String body = "{\"reason\":\"customer-request-refund\"}";
+        mockMvc.perform(post("/api/v1/payments/p-1/reversal")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", token)
+                        .content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("REVERSED"));
+    }
+
+    @Test
+    public void testGetTransactionsByPaymentId_returnsList() throws Exception {
+        PaymentResponse pr = new PaymentResponse();
+        pr.setId("p-1");
+        when(queryService.findById("p-1")).thenReturn(pr);
+        when(transactionService.getTransactionsByPaymentId("p-1")).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/v1/payments/p-1/transactions")
+                        .header("Authorization", token))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    public void testGetWorkflowStatus_returnsStatus() throws Exception {
+        com.example.paymentapi.temporal.workflow.PaymentCreationWorkflow wf =
+                mock(com.example.paymentapi.temporal.workflow.PaymentCreationWorkflow.class);
+        when(wf.getCurrentStatus()).thenReturn("TRANSFERRING");
+        when(wf.getPaymentId()).thenReturn("pay-xyz");
+        when(workflowClient.newWorkflowStub(
+                eq(com.example.paymentapi.temporal.workflow.PaymentCreationWorkflow.class),
+                eq("wf-123"))).thenReturn(wf);
+
+        mockMvc.perform(get("/api/v1/payments/workflows/wf-123/status")
+                        .header("Authorization", token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.workflowId").value("wf-123"))
+                .andExpect(jsonPath("$.status").value("TRANSFERRING"))
+                .andExpect(jsonPath("$.paymentId").value("pay-xyz"));
+    }
+
+    @Test
+    public void testGetWorkflowStatus_notFound_returns404() throws Exception {
+        when(workflowClient.newWorkflowStub(
+                eq(com.example.paymentapi.temporal.workflow.PaymentCreationWorkflow.class),
+                eq("wf-missing")))
+                .thenThrow(new io.temporal.client.WorkflowNotFoundException(
+                        io.temporal.api.common.v1.WorkflowExecution.newBuilder()
+                                .setWorkflowId("wf-missing").build(),
+                        "PaymentCreationWorkflow",
+                        new RuntimeException("workflow not found")));
+
+        mockMvc.perform(get("/api/v1/payments/workflows/wf-missing/status")
+                        .header("Authorization", token))
+                .andExpect(status().isNotFound());
+    }
 }

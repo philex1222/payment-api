@@ -2,10 +2,19 @@ package com.example.paymentapi.exception;
 
 import com.example.paymentapi.dto.ErrorResponse;
 import com.example.paymentapi.model.PaymentStatus;
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.ConstraintViolationException;
+import jakarta.validation.Path;
+import java.beans.PropertyChangeEvent;
+import java.util.List;
+import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
+import org.springframework.core.MethodParameter;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.HttpInputMessage;
@@ -15,10 +24,14 @@ import org.springframework.validation.BeanPropertyBindingResult;
 import org.springframework.validation.FieldError;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.context.request.ServletWebRequest;
 import org.springframework.web.context.request.WebRequest;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.servlet.NoHandlerFoundException;
 
@@ -295,6 +308,134 @@ class PaymentExceptionHandlerTest {
             assertEquals(404, response.getBody().getStatus());
             assertEquals("Not Found", response.getBody().getError());
             assertEquals("The requested resource was not found", response.getBody().getMessage());
+        }
+    }
+
+    @Nested
+    @DisplayName("Additional handler coverage")
+    class AdditionalHandlerTests {
+
+        @Test
+        void handleUserNotFoundException_returns404() {
+            ResponseEntity<ErrorResponse> r = exceptionHandler.handleUserNotFoundException(
+                    new UserNotFoundException("missing"), webRequest);
+            assertEquals(HttpStatus.NOT_FOUND, r.getStatusCode());
+            assertEquals("User Not Found", r.getBody().getError());
+        }
+
+        @Test
+        void handleWebhookSubscriptionNotFoundException_returns404() {
+            ResponseEntity<ErrorResponse> r = exceptionHandler.handleWebhookSubscriptionNotFoundException(
+                    new WebhookSubscriptionNotFoundException("sub-1"), webRequest);
+            assertEquals(HttpStatus.NOT_FOUND, r.getStatusCode());
+            assertEquals("Webhook Subscription Not Found", r.getBody().getError());
+        }
+
+        @Test
+        void handleNoSuchElementException_returns404() {
+            ResponseEntity<ErrorResponse> r = exceptionHandler.handleNoSuchElementException(
+                    new java.util.NoSuchElementException("x"), webRequest);
+            assertEquals(HttpStatus.NOT_FOUND, r.getStatusCode());
+        }
+
+        @Test
+        void handleMissingParameterException_returns400WithParamName() {
+            MissingServletRequestParameterException ex =
+                    new MissingServletRequestParameterException("since", "String");
+            ResponseEntity<ErrorResponse> r = exceptionHandler.handleMissingParameterException(ex, webRequest);
+            assertEquals(HttpStatus.BAD_REQUEST, r.getStatusCode());
+            assertTrue(r.getBody().getMessage().contains("since"));
+        }
+
+        @Test
+        void handleTypeMismatchException_returns400WithParamAndType() {
+            MethodArgumentTypeMismatchException ex = new MethodArgumentTypeMismatchException(
+                    "xyz", Integer.class, "pageSize", null, new NumberFormatException("bad"));
+            ResponseEntity<ErrorResponse> r = exceptionHandler.handleTypeMismatchException(ex, webRequest);
+            assertEquals(HttpStatus.BAD_REQUEST, r.getStatusCode());
+            assertTrue(r.getBody().getMessage().contains("pageSize"));
+            assertTrue(r.getBody().getMessage().contains("Integer"));
+        }
+
+        @Test
+        void handleTypeMismatchException_handlesUnknownType() {
+            MethodArgumentTypeMismatchException ex = new MethodArgumentTypeMismatchException(
+                    "xyz", null, "pageSize", null, new NumberFormatException("bad"));
+            ResponseEntity<ErrorResponse> r = exceptionHandler.handleTypeMismatchException(ex, webRequest);
+            assertEquals(HttpStatus.BAD_REQUEST, r.getStatusCode());
+            assertTrue(r.getBody().getMessage().contains("unknown"));
+        }
+
+        @Test
+        void handleNoResourceFoundException_returns404() {
+            NoResourceFoundException ex = new NoResourceFoundException(HttpMethod.GET, "/missing");
+            ResponseEntity<ErrorResponse> r = exceptionHandler.handleNoResourceFoundException(ex, webRequest);
+            assertEquals(HttpStatus.NOT_FOUND, r.getStatusCode());
+        }
+
+        @Test
+        void handleUsernameAlreadyExistsException_returns409() {
+            ResponseEntity<ErrorResponse> r = exceptionHandler.handleUsernameAlreadyExistsException(
+                    new UsernameAlreadyExistsException("alice"), webRequest);
+            assertEquals(HttpStatus.CONFLICT, r.getStatusCode());
+            assertEquals("Username Already Taken", r.getBody().getError());
+        }
+
+        @Test
+        void handleDataIntegrityViolationException_returns409() {
+            ResponseEntity<ErrorResponse> r = exceptionHandler.handleDataIntegrityViolationException(
+                    new DataIntegrityViolationException("dup key"), webRequest);
+            assertEquals(HttpStatus.CONFLICT, r.getStatusCode());
+            assertEquals("Data Integrity Violation", r.getBody().getError());
+        }
+
+        @Test
+        void handleIllegalStateException_returns409() {
+            ResponseEntity<ErrorResponse> r = exceptionHandler.handleIllegalStateException(
+                    new IllegalStateException("can't do that"), webRequest);
+            assertEquals(HttpStatus.CONFLICT, r.getStatusCode());
+            assertEquals("Invalid Operation", r.getBody().getError());
+        }
+
+        @Test
+        void handleValidationException_buildsFieldErrorsAndRedactsSensitive() {
+            BeanPropertyBindingResult binding = new BeanPropertyBindingResult(new Object(), "target");
+            binding.addError(new FieldError("target", "amount", "abc", false,
+                    null, null, "must be a number"));
+            binding.addError(new FieldError("target", "password", "s3cret", false,
+                    null, null, "too short"));
+
+            MethodArgumentNotValidException ex = Mockito.mock(MethodArgumentNotValidException.class);
+            Mockito.when(ex.getBindingResult()).thenReturn(binding);
+            Mockito.when(ex.getMessage()).thenReturn("validation failed");
+
+            ResponseEntity<ErrorResponse> r = exceptionHandler.handleValidationException(ex, webRequest);
+
+            assertEquals(HttpStatus.BAD_REQUEST, r.getStatusCode());
+            List<ErrorResponse.FieldError> errors = r.getBody().getFieldErrors();
+            assertEquals(2, errors.size());
+            ErrorResponse.FieldError passwordError = errors.stream()
+                    .filter(fe -> "password".equals(fe.getField())).findFirst().orElseThrow();
+            assertNull(passwordError.getRejectedValue());
+            ErrorResponse.FieldError amountError = errors.stream()
+                    .filter(fe -> "amount".equals(fe.getField())).findFirst().orElseThrow();
+            assertEquals("abc", amountError.getRejectedValue());
+        }
+
+        @Test
+        void handleConstraintViolationException_mapsPathToField() {
+            @SuppressWarnings("unchecked")
+            ConstraintViolation<Object> cv = Mockito.mock(ConstraintViolation.class);
+            Path path = Mockito.mock(Path.class);
+            Mockito.when(path.toString()).thenReturn("create.request.amount");
+            Mockito.when(cv.getPropertyPath()).thenReturn(path);
+            Mockito.when(cv.getMessage()).thenReturn("must be positive");
+            Mockito.when(cv.getInvalidValue()).thenReturn(-1);
+
+            ConstraintViolationException ex = new ConstraintViolationException(Set.of(cv));
+            ResponseEntity<ErrorResponse> r = exceptionHandler.handleConstraintViolationException(ex, webRequest);
+            assertEquals(HttpStatus.BAD_REQUEST, r.getStatusCode());
+            assertEquals("amount", r.getBody().getFieldErrors().get(0).getField());
         }
     }
 

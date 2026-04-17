@@ -1,8 +1,12 @@
 package com.example.paymentapi.config;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
+
+import java.util.Base64;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class AesGcmAttributeConverterTest {
 
@@ -43,5 +47,41 @@ class AesGcmAttributeConverterTest {
         String encrypted = converter.convertToDatabaseColumn("token");
         // Base64 characters only: A-Z, a-z, 0-9, +, /, =
         assertThat(encrypted).matches("[A-Za-z0-9+/=]+");
+    }
+
+    @Test
+    void customKey_roundTripsSuccessfully() {
+        AesGcmAttributeConverter custom = new AesGcmAttributeConverter();
+        byte[] key = new byte[32];
+        for (int i = 0; i < 32; i++) key[i] = (byte) i;
+        ReflectionTestUtils.setField(custom, "secretKeyBase64", Base64.getEncoder().encodeToString(key));
+        String plaintext = "custom-key-token";
+        String encrypted = custom.convertToDatabaseColumn(plaintext);
+        assertThat(custom.convertToEntityAttribute(encrypted)).isEqualTo(plaintext);
+    }
+
+    @Test
+    void decrypt_withMalformedBase64_throwsIllegalState() {
+        assertThatThrownBy(() -> converter.convertToEntityAttribute("!!!not-base64!!!"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("decrypt");
+    }
+
+    @Test
+    void decrypt_withTamperedCiphertext_throwsIllegalState() {
+        String encrypted = converter.convertToDatabaseColumn("some-token");
+        // Replace last char to corrupt the GCM tag
+        String tampered = encrypted.substring(0, encrypted.length() - 2) + "AA";
+        assertThatThrownBy(() -> converter.convertToEntityAttribute(tampered))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void encrypt_withInvalidKey_throwsIllegalState() {
+        AesGcmAttributeConverter badKey = new AesGcmAttributeConverter();
+        ReflectionTestUtils.setField(badKey, "secretKeyBase64", "@@@not-valid-base64@@@");
+        assertThatThrownBy(() -> badKey.convertToDatabaseColumn("x"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("encrypt");
     }
 }

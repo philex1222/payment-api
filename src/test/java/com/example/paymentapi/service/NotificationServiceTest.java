@@ -84,4 +84,45 @@ class NotificationServiceTest {
         assertTrue(count <= 1000,
                 "Notification store exceeded cap: " + count + " entries");
     }
+
+    @Test
+    void sendPaymentNotification_shortRecipient_recordsMaskedEntry() throws InterruptedException {
+        notificationService.sendPaymentNotification("ab", "short");
+        Thread.sleep(50);
+        assertEquals(1, notificationService.getNotificationCount());
+    }
+
+    @Test
+    void sendPaymentNotification_nullMessage_doesNotThrow() throws InterruptedException {
+        notificationService.sendPaymentNotification("user@example.com", null);
+        Thread.sleep(50);
+        assertEquals(1, notificationService.getNotificationCount());
+    }
+
+    @Test
+    void sendPaymentNotification_longMessage_truncatesSummary() throws InterruptedException {
+        String longMsg = "x".repeat(100);
+        notificationService.sendPaymentNotification("user@example.com", longMsg);
+        Thread.sleep(50);
+        assertEquals(longMsg, notificationService.getSentNotifications().get(0).getMessage());
+    }
+
+    @Test
+    void sendAlertNotification_nonEmailRecipient_recordsEntry() {
+        notificationService.sendAlertNotification("555-123-4567", "SMS", "via text");
+        assertEquals(NotificationService.NotificationType.ALERT,
+                notificationService.getSentNotifications().get(0).getType());
+    }
+
+    @Test
+    void sendAlertNotification_nullRecipient_recordsEntry() {
+        notificationService.sendAlertNotification(null, "S", "m");
+        assertEquals(1, notificationService.getNotificationCount());
+    }
+
+    @Test
+    void sendAlertNotification_emailStartingAtIndex2_masksWithPrefix() {
+        notificationService.sendAlertNotification("ab@example.com", "S", "m");
+        assertEquals(1, notificationService.getNotificationCount());
+    }
 }
