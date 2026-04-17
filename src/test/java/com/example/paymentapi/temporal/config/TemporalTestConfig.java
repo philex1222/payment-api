@@ -24,7 +24,9 @@ public class TemporalTestConfig {
             PaymentNotificationActivitiesImpl notificationActivities) {
         TestWorkflowEnvironment env = TestWorkflowEnvironment.newInstance();
         Worker worker = env.newWorker(props.getTaskQueue());
-        worker.registerWorkflowImplementationTypes(PaymentCreationWorkflowImpl.class);
+        worker.registerWorkflowImplementationTypes(
+                TemporalOptionsFactory.workflowImplementationOptions(props),
+                PaymentCreationWorkflowImpl.class);
         worker.registerActivitiesImplementations(
                 validationActivities, persistenceActivities,
                 transferActivities, notificationActivities);

@@ -5,6 +5,8 @@ import com.example.paymentapi.temporal.activity.PaymentNotificationActivitiesImp
 import com.example.paymentapi.temporal.activity.PaymentPersistenceActivitiesImpl;
 import com.example.paymentapi.temporal.activity.PaymentTransferActivitiesImpl;
 import com.example.paymentapi.temporal.activity.PaymentValidationActivitiesImpl;
+import com.example.paymentapi.temporal.config.TemporalOptionsFactory;
+import com.example.paymentapi.temporal.config.TemporalProperties;
 import com.example.paymentapi.temporal.dto.PaymentCreationResult;
 import io.temporal.client.WorkflowClient;
 import io.temporal.client.WorkflowOptions;
@@ -39,7 +41,9 @@ class PaymentCreationWorkflowTest {
 
     @RegisterExtension
     static final TestWorkflowExtension testEnv = TestWorkflowExtension.newBuilder()
-            .registerWorkflowImplementationTypes(PaymentCreationWorkflowImpl.class)
+            .registerWorkflowImplementationTypes(
+                    TemporalOptionsFactory.workflowImplementationOptions(new TemporalProperties()),
+                    PaymentCreationWorkflowImpl.class)
             .setActivityImplementations(validation, persistence, transfer, notification)
             .build();
 

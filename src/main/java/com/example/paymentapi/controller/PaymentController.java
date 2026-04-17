@@ -14,6 +14,7 @@ import com.example.paymentapi.service.query.PaymentQueryService;
 import com.example.paymentapi.service.shared.PaymentSecurityHelper;
 import com.example.paymentapi.temporal.config.TemporalProperties;
 import com.example.paymentapi.temporal.dto.PaymentWorkflowResponse;
+import com.example.paymentapi.temporal.dto.WorkflowStatusResponse;
 import com.example.paymentapi.temporal.workflow.PaymentCreationWorkflow;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -112,16 +113,43 @@ public class PaymentController {
                 WorkflowOptions.newBuilder()
                         .setTaskQueue(temporalProperties.getTaskQueue())
                         .setWorkflowId(workflowId)
+                        .setWorkflowRunTimeout(temporalProperties.getWorkflow().getRunTimeout())
+                        .setWorkflowTaskTimeout(temporalProperties.getWorkflow().getTaskTimeout())
                         .build());
         stub.start(paymentRequest, initiatedBy);
 
-        PaymentWorkflowResponse wfResponse = new PaymentWorkflowResponse(workflowId, "PENDING", null);
+        String statusUrl = "/api/v1/payments/workflows/" + workflowId + "/status";
+        PaymentWorkflowResponse wfResponse = new PaymentWorkflowResponse(workflowId, "PENDING", statusUrl);
 
         if (idempotencyKey != null && !idempotencyKey.isBlank()) {
             idempotencyService.store(idempotencyKey, wfResponse);
         }
 
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(wfResponse);
+    }
+
+    @GetMapping("/workflows/{workflowId}/status")
+    @Operation(summary = "Query the live status of a payment workflow",
+               description = "Returns the workflow's current phase (PENDING / VALIDATING / PERSISTING / "
+                           + "TRANSFERRING / COMPLETING / NOTIFYING / COMPLETED) and the paymentId once it "
+                           + "has been persisted. Responds 200 while the workflow exists in the Temporal cluster.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Workflow status retrieved"),
+        @ApiResponse(responseCode = "404", description = "Workflow not found"),
+        @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    public ResponseEntity<WorkflowStatusResponse> getWorkflowStatus(
+            @Parameter(description = "Workflow ID returned by POST /api/v1/payments", required = true)
+            @PathVariable String workflowId) {
+        try {
+            PaymentCreationWorkflow wf = workflowClient.newWorkflowStub(
+                    PaymentCreationWorkflow.class, workflowId);
+            String status = wf.getCurrentStatus();
+            String paymentId = wf.getPaymentId();
+            return ResponseEntity.ok(new WorkflowStatusResponse(workflowId, status, paymentId));
+        } catch (io.temporal.client.WorkflowNotFoundException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+        }
     }
 
     @GetMapping("/{id}")

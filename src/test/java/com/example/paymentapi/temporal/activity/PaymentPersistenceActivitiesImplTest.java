@@ -7,6 +7,7 @@ import com.example.paymentapi.repository.PaymentRepository;
 import com.example.paymentapi.service.AuditService;
 import com.example.paymentapi.service.TransactionService;
 import com.example.paymentapi.util.PaymentConstants;
+import io.temporal.failure.ApplicationFailure;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -104,7 +105,7 @@ class PaymentPersistenceActivitiesImplTest {
     @Test
     void completePayment_throwsWhenPaymentNotFound() {
         when(paymentRepository.findById("missing")).thenReturn(Optional.empty());
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(ApplicationFailure.class,
                 () -> activities.completePayment("missing"));
     }
 
@@ -127,7 +128,7 @@ class PaymentPersistenceActivitiesImplTest {
     @Test
     void failPayment_throwsWhenPaymentNotFound() {
         when(paymentRepository.findById("gone")).thenReturn(Optional.empty());
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(ApplicationFailure.class,
                 () -> activities.failPayment("gone", "reason"));
     }
 }

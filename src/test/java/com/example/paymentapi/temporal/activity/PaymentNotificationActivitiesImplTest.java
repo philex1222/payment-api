@@ -5,11 +5,14 @@ import com.example.paymentapi.model.Payment;
 import com.example.paymentapi.model.WebhookEventType;
 import com.example.paymentapi.repository.PaymentRepository;
 import com.example.paymentapi.service.NotificationService;
+import com.example.paymentapi.service.UserService;
 import com.example.paymentapi.service.shared.PaymentEventPublisher;
 import com.example.paymentapi.service.shared.PaymentMapper;
+import com.example.paymentapi.temporal.config.TemporalProperties;
+import io.temporal.failure.ApplicationFailure;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -34,8 +37,19 @@ class PaymentNotificationActivitiesImplTest {
     @Mock
     private PaymentMapper mapper;
 
-    @InjectMocks
+    @Mock
+    private UserService userService;
+
+    private final TemporalProperties temporalProperties = new TemporalProperties();
+
     private PaymentNotificationActivitiesImpl activities;
+
+    @BeforeEach
+    void setUp() {
+        activities = new PaymentNotificationActivitiesImpl(
+                notificationService, eventPublisher, paymentRepository, mapper,
+                userService, temporalProperties);
+    }
 
     // ── sendNotification ───────────────────────────────────────────────────────
 
@@ -74,7 +88,7 @@ class PaymentNotificationActivitiesImplTest {
     @Test
     void publishWebhookEvent_throwsWhenPaymentNotFound() {
         when(paymentRepository.findById("missing")).thenReturn(Optional.empty());
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(ApplicationFailure.class,
                 () -> activities.publishWebhookEvent("missing", "admin"));
     }
 

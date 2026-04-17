@@ -1,6 +1,7 @@
 package com.example.paymentapi.temporal.activity;
 
 import com.example.paymentapi.service.shared.PaymentValidationService;
+import io.temporal.failure.ApplicationFailure;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -32,7 +33,7 @@ class PaymentValidationActivitiesImplTest {
     void validateAccounts_propagatesExceptionFromService() {
         doThrow(new IllegalArgumentException("Same account")).when(validationService)
                 .validateAccounts("same", "same");
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(ApplicationFailure.class,
                 () -> activities.validateAccounts("same", "same"));
     }
 
@@ -48,7 +49,7 @@ class PaymentValidationActivitiesImplTest {
         BigDecimal amount = BigDecimal.valueOf(999999);
         doThrow(new IllegalStateException("Insufficient funds")).when(validationService)
                 .validateSufficientFunds("1234567890", amount);
-        assertThrows(IllegalStateException.class,
+        assertThrows(ApplicationFailure.class,
                 () -> activities.validateFunds("1234567890", amount));
     }
 

@@ -6,62 +6,27 @@ import com.example.paymentapi.temporal.activity.PaymentPersistenceActivities;
 import com.example.paymentapi.temporal.activity.PaymentTransferActivities;
 import com.example.paymentapi.temporal.activity.PaymentValidationActivities;
 import com.example.paymentapi.temporal.dto.PaymentCreationResult;
-import io.temporal.activity.ActivityOptions;
-import io.temporal.common.RetryOptions;
 import io.temporal.failure.ActivityFailure;
+import io.temporal.failure.ApplicationFailure;
 import io.temporal.workflow.Saga;
 import io.temporal.workflow.Workflow;
-
-import java.time.Duration;
 
 public class PaymentCreationWorkflowImpl implements PaymentCreationWorkflow {
 
     private String currentStatus = "PENDING";
     private String paymentId;
 
+    // ActivityOptions are provided by the worker via WorkflowImplementationOptions
+    // (see TemporalOptionsFactory). Keeping the stub definitions lean here makes the
+    // workflow pure orchestration and keeps tuning knobs in TemporalProperties.
     private final PaymentValidationActivities validationActivities =
-            Workflow.newActivityStub(PaymentValidationActivities.class,
-                    ActivityOptions.newBuilder()
-                            .setStartToCloseTimeout(Duration.ofSeconds(10))
-                            .setRetryOptions(RetryOptions.newBuilder()
-                                    .setMaximumAttempts(3)
-                                    .setInitialInterval(Duration.ofSeconds(1))
-                                    .setBackoffCoefficient(1.0)
-                                    .build())
-                            .build());
-
+            Workflow.newActivityStub(PaymentValidationActivities.class);
     private final PaymentPersistenceActivities persistenceActivities =
-            Workflow.newActivityStub(PaymentPersistenceActivities.class,
-                    ActivityOptions.newBuilder()
-                            .setStartToCloseTimeout(Duration.ofSeconds(15))
-                            .setRetryOptions(RetryOptions.newBuilder()
-                                    .setMaximumAttempts(3)
-                                    .setInitialInterval(Duration.ofSeconds(1))
-                                    .setBackoffCoefficient(1.0)
-                                    .build())
-                            .build());
-
+            Workflow.newActivityStub(PaymentPersistenceActivities.class);
     private final PaymentTransferActivities transferActivities =
-            Workflow.newActivityStub(PaymentTransferActivities.class,
-                    ActivityOptions.newBuilder()
-                            .setStartToCloseTimeout(Duration.ofSeconds(30))
-                            .setRetryOptions(RetryOptions.newBuilder()
-                                    .setMaximumAttempts(5)
-                                    .setInitialInterval(Duration.ofMillis(500))
-                                    .setBackoffCoefficient(2.0)
-                                    .build())
-                            .build());
-
+            Workflow.newActivityStub(PaymentTransferActivities.class);
     private final PaymentNotificationActivities notificationActivities =
-            Workflow.newActivityStub(PaymentNotificationActivities.class,
-                    ActivityOptions.newBuilder()
-                            .setStartToCloseTimeout(Duration.ofSeconds(10))
-                            .setRetryOptions(RetryOptions.newBuilder()
-                                    .setMaximumAttempts(3)
-                                    .setInitialInterval(Duration.ofSeconds(1))
-                                    .setBackoffCoefficient(1.0)
-                                    .build())
-                            .build());
+            Workflow.newActivityStub(PaymentNotificationActivities.class);
 
     @Override
     public PaymentCreationResult create(PaymentRequest request, String initiatedBy) {
@@ -74,14 +39,17 @@ public class PaymentCreationWorkflowImpl implements PaymentCreationWorkflow {
 
         currentStatus = "PERSISTING";
         paymentId = persistenceActivities.persistPending(request, initiatedBy);
+        // Placeholder compensation — updated with the real cause the instant we know it.
+        final String[] failureReason = {"Payment workflow failed"};
         saga.addCompensation(() ->
-                persistenceActivities.failPayment(paymentId, "Payment failed during processing"));
+                persistenceActivities.failPayment(paymentId, failureReason[0]));
 
         currentStatus = "TRANSFERRING";
         try {
             transferActivities.transferFunds(
                     request.getSourceAccount(), request.getDestinationAccount(), request.getAmount());
         } catch (ActivityFailure e) {
+            failureReason[0] = describeFailure(e);
             saga.compensate();
             throw e;
         }
@@ -91,7 +59,7 @@ public class PaymentCreationWorkflowImpl implements PaymentCreationWorkflow {
 
         currentStatus = "NOTIFYING";
         try {
-            notificationActivities.sendNotification(paymentId, "user@example.com",
+            notificationActivities.sendNotification(paymentId, initiatedBy,
                     "Payment completed. Amount: " + request.getAmount() + " " + request.getCurrency());
         } catch (ActivityFailure e) {
             Workflow.getLogger(PaymentCreationWorkflowImpl.class)
@@ -106,6 +74,25 @@ public class PaymentCreationWorkflowImpl implements PaymentCreationWorkflow {
 
         currentStatus = "COMPLETED";
         return new PaymentCreationResult(workflowId, paymentId, "COMPLETED");
+    }
+
+    /**
+     * Extracts the original failure message from a Temporal {@link ActivityFailure} chain so the
+     * saga compensation step can record a meaningful reason instead of a generic placeholder.
+     */
+    private static String describeFailure(ActivityFailure e) {
+        Throwable cause = e.getCause();
+        if (cause instanceof ApplicationFailure af) {
+            String type = af.getType();
+            String message = af.getOriginalMessage();
+            if (message != null && !message.isBlank()) {
+                return (type != null && !type.isBlank()) ? type + ": " + message : message;
+            }
+        }
+        if (cause != null && cause.getMessage() != null && !cause.getMessage().isBlank()) {
+            return cause.getMessage();
+        }
+        return e.getMessage();
     }
 
     @Override
