@@ -57,11 +57,37 @@
           Same major version — API-compatible.
         -->
         <httpclient5.version>5.6</httpclient5.version>
-        <temporal.version>1.26.1</temporal.version>
+        <!--
+          Temporal Java SDK. Pinned to 1.30.1 (latest GA as of 2026-04-17) so we pull in
+          protobuf-java-util 3.25.7 (CVE-2024-7254 fix ≥ 3.25.5) and grpc 1.58.x
+          (CVE-2023-32731 fix ≥ 1.54.2). grpc-netty-shaded is further bumped to 1.75.0
+          via grpc.version below for CVE-2025-55163.
+        -->
+        <temporal.version>1.30.1</temporal.version>
+        <!--
+          Override grpc-bom ahead of Temporal's transitive import (1.58.1) to fix
+          CVE-2025-55163 — Netty MadeYouReset HTTP/2 DDoS, fixed in grpc-java 1.75.0.
+          Imported as a BOM below in dependencyManagement; direct depMgmt wins over
+          transitive, so all grpc-* jars (netty-shaded, api, stub, services, protobuf,
+          core, context, inprocess) move together to a version-locked 1.75.x stack.
+        -->
+        <grpc.version>1.75.0</grpc.version>
     </properties>
 
     <dependencyManagement>
         <dependencies>
+            <!--
+              grpc-bom override — MUST come before Temporal's transitive import so our
+              1.75.0 version wins over the 1.58.1 shipped by temporal-serviceclient:1.30.1.
+              Addresses CVE-2025-55163 (Netty MadeYouReset HTTP/2 DDoS, fixed 1.75.0).
+            -->
+            <dependency>
+                <groupId>io.grpc</groupId>
+                <artifactId>grpc-bom</artifactId>
+                <version>${grpc.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
             <!-- Resilience4j BOM — not managed by Spring Boot parent -->
             <dependency>
                 <groupId>io.github.resilience4j</groupId>
