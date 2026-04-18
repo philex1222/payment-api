@@ -76,4 +76,39 @@ class TemporalOptionsFactoryTest {
         assertThat(transfer.getRetryOptions().getBackoffCoefficient()).isEqualTo(2.0);
         assertThat(transfer.getRetryOptions().getMaximumInterval()).isEqualTo(Duration.ofSeconds(30));
     }
+
+    @Test
+    void retryOptions_validation_hasDoNotRetryDefaults() {
+        TemporalProperties props = newProps();
+        ActivityOptions validation = TemporalOptionsFactory.activityOptionsByType(props).get("ValidateAccounts");
+        String[] doNotRetry = validation.getRetryOptions().getDoNotRetry();
+        assertThat(doNotRetry).isNotNull();
+        assertThat(doNotRetry).contains(
+                "com.example.paymentapi.exception.InvalidAccountException",
+                "com.example.paymentapi.exception.InsufficientFundsException",
+                "java.lang.IllegalArgumentException",
+                "java.lang.IllegalStateException");
+    }
+
+    @Test
+    void retryOptions_transfer_doNotRetryExcludesNetworkErrors() {
+        TemporalProperties props = newProps();
+        ActivityOptions transfer = TemporalOptionsFactory.activityOptionsByType(props).get("TransferFunds");
+        String[] doNotRetry = transfer.getRetryOptions().getDoNotRetry();
+        assertThat(doNotRetry).contains(
+                "com.example.paymentapi.exception.InvalidAccountException",
+                "com.example.paymentapi.exception.InsufficientFundsException");
+        // Generic runtime errors SHOULD still retry — they represent transient network faults.
+        assertThat(doNotRetry).doesNotContain("java.lang.RuntimeException");
+    }
+
+    @Test
+    void retryOptions_notification_emptyDoNotRetryAllowsFullRetryBudget() {
+        TemporalProperties props = newProps();
+        ActivityOptions notification =
+                TemporalOptionsFactory.activityOptionsByType(props).get("SendNotification");
+        // Notification tier permits full retry (best-effort delivery) — no exclusions.
+        String[] doNotRetry = notification.getRetryOptions().getDoNotRetry();
+        assertThat(doNotRetry == null || doNotRetry.length == 0).isTrue();
+    }
 }

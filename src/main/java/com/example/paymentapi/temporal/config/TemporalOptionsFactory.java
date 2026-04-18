@@ -85,11 +85,14 @@ public final class TemporalOptionsFactory {
     }
 
     private static RetryOptions toRetryOptions(TemporalProperties.Retry retry) {
-        return RetryOptions.newBuilder()
+        RetryOptions.Builder builder = RetryOptions.newBuilder()
                 .setMaximumAttempts(retry.getMaximumAttempts())
                 .setInitialInterval(retry.getInitialInterval())
                 .setBackoffCoefficient(retry.getBackoffCoefficient())
-                .setMaximumInterval(retry.getMaximumInterval())
-                .build();
+                .setMaximumInterval(retry.getMaximumInterval());
+        if (retry.getDoNotRetry() != null && !retry.getDoNotRetry().isEmpty()) {
+            builder.setDoNotRetry(retry.getDoNotRetry().toArray(new String[0]));
+        }
+        return builder.build();
     }
 }

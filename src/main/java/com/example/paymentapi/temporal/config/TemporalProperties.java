@@ -4,6 +4,8 @@ import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Externalised Temporal configuration. All values have production-sensible defaults,
@@ -39,14 +41,46 @@ public class TemporalProperties {
 
     private final Workflow workflow = new Workflow();
     private final Activity validation = new Activity(Duration.ofSeconds(10),
-            new Retry(3, Duration.ofSeconds(1), 1.0, Duration.ofSeconds(5)));
+            new Retry(3, Duration.ofSeconds(1), 1.0, Duration.ofSeconds(5),
+                    defaultDoNotRetryForValidation()));
     private final Activity persistence = new Activity(Duration.ofSeconds(15),
-            new Retry(3, Duration.ofSeconds(1), 1.5, Duration.ofSeconds(10)));
+            new Retry(3, Duration.ofSeconds(1), 1.5, Duration.ofSeconds(10),
+                    defaultDoNotRetryForPersistence()));
     private final Activity transfer = new Activity(Duration.ofMinutes(2),
-            new Retry(5, Duration.ofMillis(500), 2.0, Duration.ofSeconds(30)));
+            new Retry(5, Duration.ofMillis(500), 2.0, Duration.ofSeconds(30),
+                    defaultDoNotRetryForTransfer()));
     private final Activity notification = new Activity(Duration.ofSeconds(10),
-            new Retry(3, Duration.ofSeconds(1), 1.0, Duration.ofSeconds(5)));
+            new Retry(3, Duration.ofSeconds(1), 1.0, Duration.ofSeconds(5), new ArrayList<>()));
     private final Duration transferHeartbeatTimeout = Duration.ofSeconds(30);
+
+    /**
+     * Defense-in-depth: belt-and-braces list of exception class names that must never be retried,
+     * regardless of whether the activity correctly wraps them in {@code ApplicationFailure}.
+     * Validation failures are deterministic — retrying wastes the retry budget on a known "no".
+     */
+    private static List<String> defaultDoNotRetryForValidation() {
+        List<String> list = new ArrayList<>();
+        list.add("com.example.paymentapi.exception.InvalidAccountException");
+        list.add("com.example.paymentapi.exception.InsufficientFundsException");
+        list.add("java.lang.IllegalArgumentException");
+        list.add("java.lang.IllegalStateException");
+        return list;
+    }
+
+    /** Persistence layer: referential/lookup failures are deterministic. */
+    private static List<String> defaultDoNotRetryForPersistence() {
+        List<String> list = new ArrayList<>();
+        list.add("java.lang.IllegalArgumentException");
+        return list;
+    }
+
+    /** Transfer layer: only deterministic pre-conditions are non-retryable; network errors retry. */
+    private static List<String> defaultDoNotRetryForTransfer() {
+        List<String> list = new ArrayList<>();
+        list.add("com.example.paymentapi.exception.InvalidAccountException");
+        list.add("com.example.paymentapi.exception.InsufficientFundsException");
+        return list;
+    }
 
     private final Worker worker = new Worker();
     private final Metrics metrics = new Metrics();
@@ -78,15 +112,28 @@ public class TemporalProperties {
         private Duration initialInterval;
         private double backoffCoefficient;
         private Duration maximumInterval;
+        /**
+         * Fully-qualified exception class names that Temporal must never retry.
+         * Defense-in-depth against activity code that fails to wrap a deterministic
+         * business error in {@link io.temporal.failure.ApplicationFailure#newNonRetryableFailure}.
+         */
+        private List<String> doNotRetry = new ArrayList<>();
 
         public Retry() {}
 
         public Retry(int maximumAttempts, Duration initialInterval,
                      double backoffCoefficient, Duration maximumInterval) {
+            this(maximumAttempts, initialInterval, backoffCoefficient, maximumInterval, new ArrayList<>());
+        }
+
+        public Retry(int maximumAttempts, Duration initialInterval,
+                     double backoffCoefficient, Duration maximumInterval,
+                     List<String> doNotRetry) {
             this.maximumAttempts = maximumAttempts;
             this.initialInterval = initialInterval;
             this.backoffCoefficient = backoffCoefficient;
             this.maximumInterval = maximumInterval;
+            this.doNotRetry = doNotRetry != null ? doNotRetry : new ArrayList<>();
         }
     }
 

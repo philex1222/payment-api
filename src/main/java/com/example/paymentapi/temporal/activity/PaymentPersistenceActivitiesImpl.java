@@ -6,6 +6,7 @@ import com.example.paymentapi.model.PaymentStatus;
 import com.example.paymentapi.repository.PaymentRepository;
 import com.example.paymentapi.service.AuditService;
 import com.example.paymentapi.service.TransactionService;
+import com.example.paymentapi.temporal.metrics.PaymentWorkflowMetrics;
 import com.example.paymentapi.util.PaymentConstants;
 import io.temporal.failure.ApplicationFailure;
 import org.slf4j.Logger;
@@ -24,13 +25,16 @@ public class PaymentPersistenceActivitiesImpl implements PaymentPersistenceActiv
     private final PaymentRepository paymentRepository;
     private final TransactionService transactionService;
     private final AuditService auditService;
+    private final PaymentWorkflowMetrics workflowMetrics;
 
     public PaymentPersistenceActivitiesImpl(PaymentRepository paymentRepository,
                                             TransactionService transactionService,
-                                            AuditService auditService) {
+                                            AuditService auditService,
+                                            PaymentWorkflowMetrics workflowMetrics) {
         this.paymentRepository = paymentRepository;
         this.transactionService = transactionService;
         this.auditService = auditService;
+        this.workflowMetrics = workflowMetrics;
     }
 
     @Override
@@ -62,6 +66,7 @@ public class PaymentPersistenceActivitiesImpl implements PaymentPersistenceActiv
             payment.setStatus(PaymentStatus.COMPLETED.getCode());
             paymentRepository.save(payment);
             auditService.logPaymentEvent(paymentId, PaymentConstants.AUDIT_PAYMENT_COMPLETED);
+            workflowMetrics.recordCompleted();
         }
     }
 
@@ -76,6 +81,7 @@ public class PaymentPersistenceActivitiesImpl implements PaymentPersistenceActiv
             paymentRepository.save(payment);
             logger.warn("Marking payment {} as FAILED. Reason: {}", paymentId, reason);
             auditService.logPaymentEvent(paymentId, PaymentConstants.AUDIT_PAYMENT_FAILED);
+            workflowMetrics.recordFailed(reason);
         }
     }
 }

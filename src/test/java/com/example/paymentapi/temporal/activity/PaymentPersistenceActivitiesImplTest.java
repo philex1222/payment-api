@@ -6,6 +6,7 @@ import com.example.paymentapi.model.PaymentStatus;
 import com.example.paymentapi.repository.PaymentRepository;
 import com.example.paymentapi.service.AuditService;
 import com.example.paymentapi.service.TransactionService;
+import com.example.paymentapi.temporal.metrics.PaymentWorkflowMetrics;
 import com.example.paymentapi.util.PaymentConstants;
 import io.temporal.failure.ApplicationFailure;
 import org.junit.jupiter.api.Test;
@@ -33,6 +34,9 @@ class PaymentPersistenceActivitiesImplTest {
 
     @Mock
     private AuditService auditService;
+
+    @Mock
+    private PaymentWorkflowMetrics workflowMetrics;
 
     @InjectMocks
     private PaymentPersistenceActivitiesImpl activities;
@@ -100,6 +104,7 @@ class PaymentPersistenceActivitiesImplTest {
 
         assertEquals(PaymentStatus.COMPLETED.getCode(), payment.getStatus());
         verify(auditService).logPaymentEvent("pay-456", PaymentConstants.AUDIT_PAYMENT_COMPLETED);
+        verify(workflowMetrics).recordCompleted();
     }
 
     @Test
@@ -123,6 +128,7 @@ class PaymentPersistenceActivitiesImplTest {
 
         assertEquals(PaymentStatus.FAILED.getCode(), payment.getStatus());
         verify(auditService).logPaymentEvent("pay-789", PaymentConstants.AUDIT_PAYMENT_FAILED);
+        verify(workflowMetrics).recordFailed("Transfer failed");
     }
 
     @Test

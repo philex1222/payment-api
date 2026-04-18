@@ -12,6 +12,7 @@ import com.example.paymentapi.service.command.PaymentLifecycleHandler;
 import com.example.paymentapi.service.command.ReversalHandler;
 import com.example.paymentapi.service.query.PaymentQueryService;
 import com.example.paymentapi.temporal.dto.PaymentWorkflowResponse;
+import com.example.paymentapi.temporal.metrics.PaymentWorkflowMetrics;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.temporal.client.WorkflowClient;
 import io.temporal.client.WorkflowStub;
@@ -68,6 +69,9 @@ public class PaymentControllerTest {
 
     @MockitoBean
     private TransactionService transactionService;
+
+    @MockitoBean
+    private PaymentWorkflowMetrics workflowMetrics;
 
     @Autowired
     private ObjectMapper objectMapper;
@@ -369,6 +373,7 @@ public class PaymentControllerTest {
                 .andExpect(status().isAccepted());
 
         verify(mockStub).signal("requestCancel", "user-changed-mind");
+        verify(workflowMetrics).recordCancelled();
     }
 
     @Test
@@ -413,5 +418,6 @@ public class PaymentControllerTest {
                 .andExpect(jsonPath("$.workflowId").value("payment-idem-42"));
 
         verify(mockStub).start(any(PaymentRequest.class), eq("admin"));
+        verify(workflowMetrics).recordStarted(true);
     }
 }

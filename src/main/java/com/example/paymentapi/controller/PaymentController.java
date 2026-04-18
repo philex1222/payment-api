@@ -15,6 +15,7 @@ import com.example.paymentapi.service.shared.PaymentSecurityHelper;
 import com.example.paymentapi.temporal.config.TemporalProperties;
 import com.example.paymentapi.temporal.dto.PaymentWorkflowResponse;
 import com.example.paymentapi.temporal.dto.WorkflowStatusResponse;
+import com.example.paymentapi.temporal.metrics.PaymentWorkflowMetrics;
 import com.example.paymentapi.temporal.workflow.PaymentCreationWorkflow;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -59,6 +60,7 @@ public class PaymentController {
     private final PaymentQueryService queryService;
     private final IdempotencyService idempotencyService;
     private final TransactionService transactionService;
+    private final PaymentWorkflowMetrics workflowMetrics;
 
     public PaymentController(WorkflowClient workflowClient,
                              TemporalProperties temporalProperties,
@@ -68,7 +70,8 @@ public class PaymentController {
                              PaymentLifecycleHandler lifecycleHandler,
                              PaymentQueryService queryService,
                              IdempotencyService idempotencyService,
-                             TransactionService transactionService) {
+                             TransactionService transactionService,
+                             PaymentWorkflowMetrics workflowMetrics) {
         this.workflowClient = workflowClient;
         this.temporalProperties = temporalProperties;
         this.security = security;
@@ -78,6 +81,7 @@ public class PaymentController {
         this.queryService = queryService;
         this.idempotencyService = idempotencyService;
         this.transactionService = transactionService;
+        this.workflowMetrics = workflowMetrics;
     }
 
     @PostMapping
@@ -128,6 +132,7 @@ public class PaymentController {
                         .setWorkflowTaskTimeout(temporalProperties.getWorkflow().getTaskTimeout())
                         .build());
         stub.start(paymentRequest, initiatedBy);
+        workflowMetrics.recordStarted(hasIdempotencyKey);
 
         String statusUrl = "/api/v1/payments/workflows/" + workflowId + "/status";
         PaymentWorkflowResponse wfResponse = new PaymentWorkflowResponse(workflowId, "PENDING", statusUrl);
@@ -159,6 +164,7 @@ public class PaymentController {
         try {
             WorkflowStub stub = workflowClient.newUntypedWorkflowStub(workflowId);
             stub.signal("requestCancel", reason);
+            workflowMetrics.recordCancelled();
             return ResponseEntity.accepted().build();
         } catch (io.temporal.client.WorkflowNotFoundException e) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
