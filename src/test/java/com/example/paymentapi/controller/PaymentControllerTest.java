@@ -357,4 +357,61 @@ public class PaymentControllerTest {
                         .header("Authorization", token))
                 .andExpect(status().isNotFound());
     }
+
+    @Test
+    public void testCancelWorkflow_sendsSignalAndReturns202() throws Exception {
+        WorkflowStub mockStub = mock(WorkflowStub.class);
+        when(workflowClient.newUntypedWorkflowStub(eq("wf-cancel-1"))).thenReturn(mockStub);
+
+        mockMvc.perform(post("/api/v1/payments/workflows/wf-cancel-1/cancel")
+                        .header("Authorization", token)
+                        .param("reason", "user-changed-mind"))
+                .andExpect(status().isAccepted());
+
+        verify(mockStub).signal("requestCancel", "user-changed-mind");
+    }
+
+    @Test
+    public void testCancelWorkflow_defaultReasonAppliedWhenOmitted() throws Exception {
+        WorkflowStub mockStub = mock(WorkflowStub.class);
+        when(workflowClient.newUntypedWorkflowStub(eq("wf-cancel-2"))).thenReturn(mockStub);
+
+        mockMvc.perform(post("/api/v1/payments/workflows/wf-cancel-2/cancel")
+                        .header("Authorization", token))
+                .andExpect(status().isAccepted());
+
+        verify(mockStub).signal("requestCancel", "user-initiated");
+    }
+
+    @Test
+    public void testCancelWorkflow_notFound_returns404() throws Exception {
+        when(workflowClient.newUntypedWorkflowStub(eq("wf-missing-cancel")))
+                .thenThrow(new io.temporal.client.WorkflowNotFoundException(
+                        io.temporal.api.common.v1.WorkflowExecution.newBuilder()
+                                .setWorkflowId("wf-missing-cancel").build(),
+                        "PaymentCreationWorkflow",
+                        new RuntimeException("workflow not found")));
+
+        mockMvc.perform(post("/api/v1/payments/workflows/wf-missing-cancel/cancel")
+                        .header("Authorization", token))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    public void testCreatePayment_withIdempotencyKey_setsWorkflowIdFromKey() throws Exception {
+        when(idempotencyService.get("idem-42")).thenReturn(Optional.empty());
+        WorkflowStub mockStub = stubWorkflowStub();
+        PaymentRequest req = new PaymentRequest("1234567890", "0987654321",
+                BigDecimal.valueOf(100), "USD", null);
+
+        mockMvc.perform(post("/api/v1/payments")
+                        .header("Authorization", token)
+                        .header(IDEMPOTENCY_KEY_HEADER, "idem-42")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.workflowId").value("payment-idem-42"));
+
+        verify(mockStub).start(any(PaymentRequest.class), eq("admin"));
+    }
 }

@@ -22,6 +22,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import io.temporal.api.enums.v1.WorkflowIdReusePolicy;
 import io.temporal.client.WorkflowClient;
 import io.temporal.client.WorkflowOptions;
 import io.temporal.client.WorkflowStub;
@@ -98,14 +99,21 @@ public class PaymentController {
             throw new IllegalArgumentException("Source and destination accounts must differ");
         }
 
-        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
+        boolean hasIdempotencyKey = idempotencyKey != null && !idempotencyKey.isBlank();
+        if (hasIdempotencyKey) {
             Optional<PaymentWorkflowResponse> cached = idempotencyService.get(idempotencyKey);
             if (cached.isPresent()) {
                 return ResponseEntity.status(HttpStatus.ACCEPTED).body(cached.get());
             }
         }
 
-        String workflowId = "payment-" + UUID.randomUUID();
+        // Derive workflowId from the idempotency key (so Temporal itself enforces
+        // de-duplication via REJECT_DUPLICATE). Falls back to a random UUID when no
+        // key is provided. This makes the first-line defence against duplicate starts
+        // Temporal-native rather than dependent on the idempotency-cache round trip.
+        String workflowId = hasIdempotencyKey
+                ? "payment-" + idempotencyKey
+                : "payment-" + UUID.randomUUID();
         String initiatedBy = security.currentUsername();
 
         WorkflowStub stub = workflowClient.newUntypedWorkflowStub(
@@ -113,6 +121,9 @@ public class PaymentController {
                 WorkflowOptions.newBuilder()
                         .setTaskQueue(temporalProperties.getTaskQueue())
                         .setWorkflowId(workflowId)
+                        .setWorkflowIdReusePolicy(hasIdempotencyKey
+                                ? WorkflowIdReusePolicy.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE
+                                : WorkflowIdReusePolicy.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE)
                         .setWorkflowRunTimeout(temporalProperties.getWorkflow().getRunTimeout())
                         .setWorkflowTaskTimeout(temporalProperties.getWorkflow().getTaskTimeout())
                         .build());
@@ -126,6 +137,32 @@ public class PaymentController {
         }
 
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(wfResponse);
+    }
+
+    @PostMapping("/workflows/{workflowId}/cancel")
+    @Operation(summary = "Request graceful cancellation of a running payment workflow",
+               description = "Sends a cancellation signal to the workflow. It finishes the activity "
+                           + "currently in flight (to avoid a partial transfer) and then routes through "
+                           + "saga compensation on the next checkpoint, marking the payment FAILED with "
+                           + "reason 'cancelled-by-user'. Returns 202 once the signal is accepted — "
+                           + "poll GET /workflows/{workflowId}/status to observe CANCELLED.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "202", description = "Cancellation signal accepted"),
+        @ApiResponse(responseCode = "404", description = "Workflow not found"),
+        @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    public ResponseEntity<Void> cancelWorkflow(
+            @Parameter(description = "Workflow ID returned by POST /api/v1/payments", required = true)
+            @PathVariable String workflowId,
+            @Parameter(description = "Optional free-text reason for cancellation (audit trail)")
+            @RequestParam(required = false, defaultValue = "user-initiated") String reason) {
+        try {
+            WorkflowStub stub = workflowClient.newUntypedWorkflowStub(workflowId);
+            stub.signal("requestCancel", reason);
+            return ResponseEntity.accepted().build();
+        } catch (io.temporal.client.WorkflowNotFoundException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+        }
     }
 
     @GetMapping("/workflows/{workflowId}/status")

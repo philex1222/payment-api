@@ -22,8 +22,6 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-import java.time.Duration;
-
 @Configuration
 @ConditionalOnProperty(name = "temporal.enabled", havingValue = "true", matchIfMissing = true)
 public class TemporalConfig {
@@ -44,7 +42,7 @@ public class TemporalConfig {
             }
         }
 
-        return WorkflowServiceStubs.newConnectedServiceStubs(stubs.build(), Duration.ofSeconds(30));
+        return WorkflowServiceStubs.newConnectedServiceStubs(stubs.build(), props.getConnectTimeout());
     }
 
     @Bean
@@ -52,6 +50,7 @@ public class TemporalConfig {
         return WorkflowClient.newInstance(stubs,
                 WorkflowClientOptions.newBuilder()
                         .setNamespace(props.getNamespace())
+                        .setDataConverter(TemporalDataConverter.get())
                         .build());
     }
 

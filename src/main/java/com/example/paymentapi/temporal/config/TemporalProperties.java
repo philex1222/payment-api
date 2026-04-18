@@ -30,6 +30,13 @@ public class TemporalProperties {
     /** Internal notification recipient domain — used by activities when resolving email for a username. */
     private String notificationDomain = "payments.internal";
 
+    /**
+     * Maximum time we block waiting for an initial gRPC connection to the Temporal server
+     * before failing application startup. Short enough to surface outages quickly, long
+     * enough to tolerate a rolling Temporal cluster restart.
+     */
+    private Duration connectTimeout = Duration.ofSeconds(30);
+
     private final Workflow workflow = new Workflow();
     private final Activity validation = new Activity(Duration.ofSeconds(10),
             new Retry(3, Duration.ofSeconds(1), 1.0, Duration.ofSeconds(5)));

@@ -10,13 +10,17 @@ import com.example.paymentapi.temporal.config.TemporalProperties;
 import com.example.paymentapi.temporal.dto.PaymentCreationResult;
 import io.temporal.client.WorkflowClient;
 import io.temporal.client.WorkflowOptions;
+import io.temporal.client.WorkflowStub;
 import io.temporal.failure.ApplicationFailure;
 import io.temporal.testing.TestWorkflowExtension;
 import io.temporal.worker.Worker;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
+import org.mockito.stubbing.Answer;
 
 import java.math.BigDecimal;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -149,6 +153,76 @@ class PaymentCreationWorkflowTest {
         PaymentCreationResult result = wf.create(standardRequest(), "admin");
 
         assertEquals("COMPLETED", result.getFinalStatus());
+    }
+
+    // ── Validation failure ─────────────────────────────────────────────────────
+
+    // ── Cancellation signal ────────────────────────────────────────────────────
+
+    @Test
+    void requestCancel_beforePersistence_stopsWorkflowAfterValidation(WorkflowClient client, Worker worker) {
+        reset(validation, persistence, transfer, notification);
+        when(persistence.persistPending(any(), anyString())).thenReturn("pay-cancel-early");
+
+        CountDownLatch cancelRequested = new CountDownLatch(1);
+        CountDownLatch validateInProgress = new CountDownLatch(1);
+        doAnswer((Answer<Void>) invocation -> {
+            validateInProgress.countDown();
+            // Wait until the test thread has signalled cancel. Keeps the activity
+            // "running" so we cross the cancel checkpoint right after return.
+            cancelRequested.await(5, TimeUnit.SECONDS);
+            return null;
+        }).when(validation).validateFunds(anyString(), any(BigDecimal.class));
+
+        PaymentCreationWorkflow wf = client.newWorkflowStub(
+                PaymentCreationWorkflow.class,
+                WorkflowOptions.newBuilder()
+                        .setTaskQueue(worker.getTaskQueue())
+                        .setWorkflowId("test-cancel-early")
+                        .build());
+
+        WorkflowClient.start(wf::create, standardRequest(), "admin");
+
+        try {
+            assertTrue(validateInProgress.await(5, TimeUnit.SECONDS),
+                    "validateFunds should start before we send cancel");
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            fail("interrupted while waiting for activity to start");
+        }
+
+        wf.requestCancel("test-abort");
+        cancelRequested.countDown();
+
+        WorkflowStub stub = WorkflowStub.fromTyped(wf);
+        PaymentCreationResult result = stub.getResult(PaymentCreationResult.class);
+        assertEquals("CANCELLED", result.getFinalStatus());
+        verify(persistence, never()).persistPending(any(), anyString());
+        verify(transfer, never()).transferFunds(anyString(), anyString(), any());
+    }
+
+    @Test
+    void requestCancel_idempotent_secondCallIgnored(WorkflowClient client, Worker worker) {
+        reset(validation, persistence, transfer, notification);
+        when(persistence.persistPending(any(), anyString())).thenReturn("pay-cancel-idem");
+
+        PaymentCreationWorkflow wf = client.newWorkflowStub(
+                PaymentCreationWorkflow.class,
+                WorkflowOptions.newBuilder()
+                        .setTaskQueue(worker.getTaskQueue())
+                        .setWorkflowId("test-cancel-idem")
+                        .build());
+
+        WorkflowClient.start(wf::create, standardRequest(), "admin");
+        // Issue two cancel signals — second should be a no-op.
+        wf.requestCancel("first");
+        wf.requestCancel("second");
+
+        WorkflowStub stub = WorkflowStub.fromTyped(wf);
+        PaymentCreationResult result = stub.getResult(PaymentCreationResult.class);
+        // Either CANCELLED or COMPLETED is acceptable — the important thing is
+        // that two cancel signals don't cause the workflow to throw.
+        assertNotNull(result.getFinalStatus());
     }
 
     // ── Validation failure ─────────────────────────────────────────────────────

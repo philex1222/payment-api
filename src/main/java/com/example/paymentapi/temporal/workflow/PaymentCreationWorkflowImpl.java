@@ -13,8 +13,14 @@ import io.temporal.workflow.Workflow;
 
 public class PaymentCreationWorkflowImpl implements PaymentCreationWorkflow {
 
+    static final String STATUS_CANCELLING = "CANCELLING";
+    static final String STATUS_CANCELLED = "CANCELLED";
+    static final String FAILURE_CANCELLED_BY_USER = "cancelled-by-user";
+
     private String currentStatus = "PENDING";
     private String paymentId;
+    private boolean cancelRequested;
+    private String cancelReason;
 
     // ActivityOptions are provided by the worker via WorkflowImplementationOptions
     // (see TemporalOptionsFactory). Keeping the stub definitions lean here makes the
@@ -36,6 +42,9 @@ public class PaymentCreationWorkflowImpl implements PaymentCreationWorkflow {
         currentStatus = "VALIDATING";
         validationActivities.validateAccounts(request.getSourceAccount(), request.getDestinationAccount());
         validationActivities.validateFunds(request.getSourceAccount(), request.getAmount());
+        if (abortIfCancelled(saga)) {
+            return cancelledResult(workflowId);
+        }
 
         currentStatus = "PERSISTING";
         paymentId = persistenceActivities.persistPending(request, initiatedBy);
@@ -43,6 +52,11 @@ public class PaymentCreationWorkflowImpl implements PaymentCreationWorkflow {
         final String[] failureReason = {"Payment workflow failed"};
         saga.addCompensation(() ->
                 persistenceActivities.failPayment(paymentId, failureReason[0]));
+        if (abortIfCancelled(saga)) {
+            failureReason[0] = FAILURE_CANCELLED_BY_USER + ": " + safeCancelReason();
+            saga.compensate();
+            return cancelledResult(workflowId);
+        }
 
         currentStatus = "TRANSFERRING";
         try {
@@ -52,6 +66,11 @@ public class PaymentCreationWorkflowImpl implements PaymentCreationWorkflow {
             failureReason[0] = describeFailure(e);
             saga.compensate();
             throw e;
+        }
+        if (abortIfCancelled(saga)) {
+            failureReason[0] = FAILURE_CANCELLED_BY_USER + ": " + safeCancelReason();
+            saga.compensate();
+            return cancelledResult(workflowId);
         }
 
         currentStatus = "COMPLETING";
@@ -74,6 +93,36 @@ public class PaymentCreationWorkflowImpl implements PaymentCreationWorkflow {
 
         currentStatus = "COMPLETED";
         return new PaymentCreationResult(workflowId, paymentId, "COMPLETED");
+    }
+
+    @Override
+    public void requestCancel(String reason) {
+        if (!cancelRequested) {
+            cancelRequested = true;
+            cancelReason = reason;
+            Workflow.getLogger(PaymentCreationWorkflowImpl.class)
+                    .info("Cancellation requested for workflow {}: {}",
+                            Workflow.getInfo().getWorkflowId(), reason);
+        }
+    }
+
+    /** @return {@code true} if the workflow should stop after compensation. */
+    private boolean abortIfCancelled(Saga saga) {
+        if (!cancelRequested) return false;
+        currentStatus = STATUS_CANCELLING;
+        Workflow.getLogger(PaymentCreationWorkflowImpl.class)
+                .info("Honoring cancellation signal for workflow {}: {}",
+                        Workflow.getInfo().getWorkflowId(), safeCancelReason());
+        return true;
+    }
+
+    private PaymentCreationResult cancelledResult(String workflowId) {
+        currentStatus = STATUS_CANCELLED;
+        return new PaymentCreationResult(workflowId, paymentId, STATUS_CANCELLED);
+    }
+
+    private String safeCancelReason() {
+        return (cancelReason == null || cancelReason.isBlank()) ? "user-initiated" : cancelReason;
     }
 
     /**
