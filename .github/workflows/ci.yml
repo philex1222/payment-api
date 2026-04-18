@@ -32,7 +32,7 @@ env:
 jobs:
 # ─────────────────────────────────────────────────────────────────────────────
 
-  # ── 1. Compile · Test · Enforce JaCoCo ≥75% line coverage ──────────────────
+  # ── 1. Compile · Test · Enforce JaCoCo ≥95% line coverage ──────────────────
   build-and-test:
     name: Build, Test & Coverage
     runs-on: ubuntu-latest

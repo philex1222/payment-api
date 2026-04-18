@@ -54,7 +54,7 @@ Go to **Manage Jenkins → Global Tool Configuration** and add:
 
 | Type  | Name          | Installer |
 |---|---|---|
-| JDK   | `temurin-17`  | AdoptOpenJDK / Eclipse Temurin — JDK 17 |
+| JDK   | `temurin-21`  | Eclipse Temurin — JDK 21 (matches the agent image) |
 | Maven | `maven-3.9`   | Maven 3.9.9 |
 
 Alternatively, apply `jenkins/casc/jenkins.yaml` via the Configuration as Code plugin to
@@ -66,7 +66,9 @@ configure tools automatically.
 
 The pipeline targets nodes labelled **`payment-api-agent`**. The agent needs:
 
-- Java 17
+- Java 21 (Eclipse Temurin — required so the agent can load controller class
+  files compiled at Java 21; the Spring Boot app is still compiled with
+  `--release 17` per `pom.xml`)
 - Maven 3.9
 - Docker CLI (with access to the host Docker socket)
 - kubectl
@@ -169,7 +171,7 @@ confirmation box.
 
 | Capability | GitHub Actions | Jenkins |
 |---|---|---|
-| Build & test (539 tests) | `ci.yml` job 1 | Stage 2 |
+| Build & test (JUnit + Cucumber, full suite) | `ci.yml` job 1 | Stage 2 |
 | OWASP Dependency-Check | `ci.yml` job 5 | Stage 3a (parallel) |
 | Trivy filesystem + secrets | `ci.yml` job 3 | Stage 3b (parallel) |
 | Docker build | `ci.yml` job 4 | Stage 4 |
@@ -181,7 +183,7 @@ confirmation box.
 | Deploy production (Helm) | `cd.yml` job 3 | Stage 10 |
 | Scheduled weekly scan | `security.yml` | Add a `cron` trigger to the job (optional) |
 | CodeQL SAST | `ci.yml` job 2 | Not included — CodeQL requires GitHub; use SonarQube instead |
-| JaCoCo coverage gate (75%) | `ci.yml` job 1 | Stage 2 (jacoco plugin) |
+| JaCoCo coverage gate (≥95%) | `ci.yml` job 1 (enforced in `pom.xml`) | Stage 2 (`mvn verify` + jacoco plugin) |
 
 ---
 

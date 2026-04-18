@@ -2,7 +2,7 @@
 # Jenkins Build Agent — payment-api
 #
 # Includes everything the Jenkinsfile needs:
-#   - Eclipse Temurin 17 JDK
+#   - Eclipse Temurin 21 JDK (matches the jenkins/jenkins:latest controller)
 #   - Apache Maven 3.9
 #   - Docker CLI (talks to the host socket mounted at runtime)
 #   - kubectl (for Kubernetes deployments)

@@ -42,7 +42,7 @@ A production-grade RESTful microservice for payment processing built with Spring
 - **Distributed tracing** — Micrometer Tracing + Zipkin with correlation ID propagation
 - **Webhook subscriptions** — push notifications for payment events; per-user ownership, admin-scope fan-out, exponential-backoff retry (5 attempts × 30s base), SSRF-safe URL validation
 - **OpenAPI docs** — Swagger UI at `/swagger-ui/index.html`
-- **75% line coverage enforced** — JaCoCo gate blocks broken builds
+- **95% line coverage enforced** — JaCoCo gate blocks broken builds
 
 ---
 
@@ -438,7 +438,7 @@ open target/site/jacoco/index.html
 open target/cucumber-reports/cucumber.html
 ```
 
-**539 tests** across 26 test classes:
+**693 tests** across unit, controller-slice, integration, E2E, REST Assured, and Cucumber BDD layers:
 
 | Layer | Count | Framework | What it covers |
 |---|---|---|---|
@@ -490,7 +490,7 @@ src/test/resources/features/
 **Reports:** `target/cucumber-reports/cucumber.html` and `cucumber.json`  
 **Runner:** `CucumberIT` (`@Suite` + `@IncludeEngines("cucumber")`)
 
-Coverage gate: **75% line coverage** enforced by JaCoCo on `mvn verify`. Current coverage: ~83%.
+Coverage gate: **95% line coverage** enforced by JaCoCo on `mvn verify`.
 
 ---
 
@@ -502,7 +502,7 @@ Triggered on every push and pull request. Runs 5 jobs:
 
 | Job | Purpose | Gate |
 |---|---|---|
-| **Build, Test & Coverage** | `mvn verify`, JaCoCo report, JUnit check run | 75% line coverage |
+| **Build, Test & Coverage** | `mvn verify`, JaCoCo report, JUnit check run | 95% line coverage |
 | **CodeQL SAST** | Static analysis with security-extended queries | Blocks on findings |
 | **Trivy Filesystem & Secrets** | Hardcoded secret scan + CVE/misconfig scan | Blocks on secrets |
 | **Docker Build & Trivy Scan** | Build image, scan for CRITICAL/HIGH CVEs (fixable) | Blocks on findings |
@@ -698,10 +698,10 @@ payment-api/
     java/.../bdd/                    # Cucumber-JVM infrastructure (CucumberIT, ScenarioContext, step defs)
     resources/features/              # Gherkin feature files (auth, registration, payments, webhooks)
     resources/schemas/               # JSON Schema files for REST Assured response validation
-    # 539 tests total (unit, controller, integration, E2E, REST Assured, Cucumber BDD)
+    # 693 tests total (unit, controller, integration, E2E, REST Assured, Cucumber BDD)
   .github/workflows/                 # CI, CD, security scan, Claude Code workflows
   helm/payment-api/                  # Helm chart for Kubernetes deployment
   Dockerfile                         # Multi-stage layered JAR build
   docker-compose.yml                 # Full local stack (app, MySQL, Redis, Prometheus, Grafana, Zipkin)
-  pom.xml                            # Maven build with JaCoCo 75% coverage gate
+  pom.xml                            # Maven build with JaCoCo 95% coverage gate
 ```

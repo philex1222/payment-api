@@ -105,7 +105,8 @@ pipeline {
         }
 
         // ── 2. BUILD & TEST ───────────────────────────────────────────────────
-        // Compiles, runs all 539 tests, enforces JaCoCo ≥75% line coverage.
+        // Compiles, runs the full JUnit + Cucumber suite, enforces JaCoCo
+        // ≥95% line coverage (pom.xml gate — see jacoco-maven-plugin config).
         stage('Build & Test') {
             options { timeout(time: 20, unit: 'MINUTES') }
             steps {
@@ -124,13 +125,17 @@ pipeline {
                         skipPublishingChecks: false
                     )
 
-                    // Publish JaCoCo coverage; fail build if line coverage drops below 75 %
+                    // Publish JaCoCo coverage. The authoritative gate lives in
+                    // pom.xml (jacoco-maven-plugin → 95% line coverage) and is
+                    // enforced during `mvn verify`. The plugin settings below
+                    // mirror that gate so the Jenkins dashboard annotation
+                    // matches the Maven failure threshold.
                     jacoco(
                         execPattern:      'target/jacoco.exec',
                         classPattern:     'target/classes',
                         sourcePattern:    'src/main/java',
                         exclusionPattern: '**/*Test*,**/*IT*,**/*Cucumber*',
-                        minimumLineCoverage:        '75',
+                        minimumLineCoverage:        '95',
                         minimumBranchCoverage:      '0',
                         minimumComplexityCoverage:  '0',
                         changeBuildStatus: true
