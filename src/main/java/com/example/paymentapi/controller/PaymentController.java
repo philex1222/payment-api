@@ -50,6 +50,12 @@ import java.util.UUID;
 public class PaymentController {
 
     static final String IDEMPOTENCY_KEY_HEADER = "Idempotency-Key";
+    // Temporal's workflowId has a 255-char server limit; we prepend "payment-" (8 chars)
+    // and need headroom for future prefixes, so cap the client-provided key at 128.
+    static final int IDEMPOTENCY_KEY_MAX_LENGTH = 128;
+    // Cancellation reason is signalled into workflow history — bound it to keep
+    // history payloads small and avoid an unbounded-free-text injection surface.
+    static final int CANCEL_REASON_MAX_LENGTH = 500;
 
     private final WorkflowClient workflowClient;
     private final TemporalProperties temporalProperties;
@@ -104,6 +110,11 @@ public class PaymentController {
         }
 
         boolean hasIdempotencyKey = idempotencyKey != null && !idempotencyKey.isBlank();
+        if (hasIdempotencyKey && idempotencyKey.length() > IDEMPOTENCY_KEY_MAX_LENGTH) {
+            throw new IllegalArgumentException(
+                    "Idempotency-Key header must be at most "
+                            + IDEMPOTENCY_KEY_MAX_LENGTH + " characters");
+        }
         if (hasIdempotencyKey) {
             Optional<PaymentWorkflowResponse> cached = idempotencyService.get(idempotencyKey);
             if (cached.isPresent()) {
@@ -159,8 +170,12 @@ public class PaymentController {
     public ResponseEntity<Void> cancelWorkflow(
             @Parameter(description = "Workflow ID returned by POST /api/v1/payments", required = true)
             @PathVariable String workflowId,
-            @Parameter(description = "Optional free-text reason for cancellation (audit trail)")
+            @Parameter(description = "Optional free-text reason for cancellation (audit trail, max 500 chars)")
             @RequestParam(required = false, defaultValue = "user-initiated") String reason) {
+        if (reason != null && reason.length() > CANCEL_REASON_MAX_LENGTH) {
+            throw new IllegalArgumentException(
+                    "reason must be at most " + CANCEL_REASON_MAX_LENGTH + " characters");
+        }
         try {
             WorkflowStub stub = workflowClient.newUntypedWorkflowStub(workflowId);
             stub.signal("requestCancel", reason);

@@ -115,6 +115,27 @@ class PaymentCreationWorkflowTest {
         verify(persistence).failPayment(eq("pay-fail-001"), anyString());
     }
 
+    @Test
+    void create_completePaymentFails_sagaCompensatesWithFailPayment(WorkflowClient client, Worker worker) {
+        reset(validation, persistence, transfer, notification);
+        when(persistence.persistPending(any(), anyString())).thenReturn("pay-complete-fail");
+        // transfer succeeds → funds have already moved. If completePayment then
+        // throws, the saga MUST run failPayment so the payment row does not stay
+        // PENDING while the funds are downstream.
+        doThrow(ApplicationFailure.newNonRetryableFailure("DB down", "PersistenceError"))
+                .when(persistence).completePayment(anyString());
+
+        PaymentCreationWorkflow wf = client.newWorkflowStub(
+                PaymentCreationWorkflow.class,
+                WorkflowOptions.newBuilder()
+                        .setTaskQueue(worker.getTaskQueue())
+                        .build());
+
+        assertThrows(Exception.class, () -> wf.create(standardRequest(), "admin"));
+        verify(transfer).transferFunds(anyString(), anyString(), any());
+        verify(persistence).failPayment(eq("pay-complete-fail"), anyString());
+    }
+
     // ── Best-effort notifications ──────────────────────────────────────────────
 
     @Test

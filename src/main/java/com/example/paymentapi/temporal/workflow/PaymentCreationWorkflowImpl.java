@@ -74,7 +74,16 @@ public class PaymentCreationWorkflowImpl implements PaymentCreationWorkflow {
         }
 
         currentStatus = "COMPLETING";
-        persistenceActivities.completePayment(paymentId);
+        // If completePayment fails after funds have already moved, run saga compensation
+        // (failPayment) so the payment row does not stay PENDING with money out the door.
+        // Without this, a DB crash mid-complete leaves a funds-moved-but-PENDING record.
+        try {
+            persistenceActivities.completePayment(paymentId);
+        } catch (ActivityFailure e) {
+            failureReason[0] = describeFailure(e);
+            saga.compensate();
+            throw e;
+        }
 
         currentStatus = "NOTIFYING";
         try {
