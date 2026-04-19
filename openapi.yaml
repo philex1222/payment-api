@@ -1,0 +1,1471 @@
+openapi: 3.1.0
+info:
+  title: Payment API
+  description: RESTful API for secure payment processing
+  contact:
+    name: Payment Team
+    email: payment@example.com
+  version: 1.0.0
+servers:
+- url: http://localhost:8080
+  description: Local development
+- url: https://api.payment.example.com
+  description: Production
+security:
+- bearerAuth: []
+tags:
+- name: Payments
+  description: Operations related to payment processing
+- name: Webhooks
+  description: Webhook subscription management — configure push notifications for
+    payment events
+- name: Authentication
+  description: Operations related to authentication
+- name: Admin
+  description: Administrative operations — requires ROLE_ADMIN
+paths:
+  /api/v1/webhooks:
+    get:
+      tags:
+      - Webhooks
+      summary: List webhook subscriptions
+      description: Users see only their own subscriptions. Admins see all.
+      operationId: listSubscriptions
+      responses:
+        "200":
+          description: Subscriptions returned
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WebhookSubscriptionResponse"
+      security:
+      - bearerAuth: []
+    post:
+      tags:
+      - Webhooks
+      summary: Register a new webhook subscription
+      description: Subscribe to one or more payment event types. Set adminScope=true
+        (ADMIN only) to receive events for all users.
+      operationId: createSubscription
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WebhookSubscriptionRequest"
+        required: true
+      responses:
+        "201":
+          description: Subscription created
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/WebhookSubscriptionResponse"
+        "400":
+          description: Invalid request or event type
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/WebhookSubscriptionResponse"
+        "403":
+          description: adminScope=true requires ROLE_ADMIN
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/WebhookSubscriptionResponse"
+      security:
+      - bearerAuth: []
+  /api/v1/payments:
+    get:
+      tags:
+      - Payments
+      summary: Get payments (paginated + filtered)
+      description: "All filter params are optional. Combine freely: ?status=FAILED&currency=USD&amountFrom=100&amountTo=500"
+      operationId: getPayments
+      parameters:
+      - name: status
+        in: query
+        description: "Filter by status (PENDING, PROCESSING, COMPLETED, FAILED, CANCELLED,\
+          \ REVERSED, REFUNDED)"
+        required: false
+        schema:
+          type: string
+      - name: dateFrom
+        in: query
+        description: "Filter by creation date — from (ISO-8601, e.g. 2026-01-01T00:00:00)"
+        required: false
+        schema:
+          type: string
+          format: date-time
+      - name: dateTo
+        in: query
+        description: "Filter by creation date — to (ISO-8601, e.g. 2026-12-31T23:59:59)"
+        required: false
+        schema:
+          type: string
+          format: date-time
+      - name: amountFrom
+        in: query
+        description: Filter by minimum amount (inclusive)
+        required: false
+        schema:
+          type: number
+      - name: amountTo
+        in: query
+        description: Filter by maximum amount (inclusive)
+        required: false
+        schema:
+          type: number
+      - name: currency
+        in: query
+        description: "Filter by ISO 4217 currency code (e.g. USD, EUR, GBP)"
+        required: false
+        schema:
+          type: string
+      - name: pageable
+        in: query
+        required: true
+        schema:
+          $ref: "#/components/schemas/Pageable"
+      responses:
+        "200":
+          description: Payments retrieved successfully
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/PagedModelPaymentResponse"
+        "400":
+          description: Invalid filter parameters
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/PagedModelPaymentResponse"
+        "500":
+          description: Internal server error
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/PagedModelPaymentResponse"
+      security:
+      - bearerAuth: []
+    post:
+      tags:
+      - Payments
+      summary: Create a new payment
+      description: "Starts a durable Temporal workflow. Returns 202 Accepted + workflowId.\
+        \ Poll GET /api/v1/payments/{paymentId} until status leaves PENDING. Optionally\
+        \ supply an 'Idempotency-Key' header to prevent duplicate charges."
+      operationId: createPayment
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        description: Client-generated unique key to prevent duplicate payments (UUID
+          recommended)
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PaymentRequest"
+        required: true
+      responses:
+        "202":
+          description: Payment workflow started
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/PaymentWorkflowResponse"
+        "400":
+          description: Invalid payment request
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/PaymentWorkflowResponse"
+        "500":
+          description: Internal server error
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/PaymentWorkflowResponse"
+      security:
+      - bearerAuth: []
+  /api/v1/payments/{id}/reversal:
+    post:
+      tags:
+      - Payments
+      summary: Initiate a payment reversal or partial refund
+      operationId: initiatePaymentReversal
+      parameters:
+      - name: id
+        in: path
+        description: Payment UUID
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReversalRequest"
+        required: true
+      responses:
+        "200":
+          description: Reversal processed successfully
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/PaymentResponse"
+        "404":
+          description: Payment not found
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/PaymentResponse"
+        "422":
+          description: Reversal not possible for current payment state
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/PaymentResponse"
+        "500":
+          description: Internal server error
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/PaymentResponse"
+      security:
+      - bearerAuth: []
+  /api/v1/payments/{id}/retry:
+    post:
+      tags:
+      - Payments
+      summary: Retry a failed payment
+      description: Re-attempts a FAILED payment. Returns 409 if the payment is not
+        in FAILED status.
+      operationId: retryPayment
+      parameters:
+      - name: id
+        in: path
+        description: Payment UUID
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: Retry initiated successfully
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/PaymentResponse"
+        "404":
+          description: Payment not found
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/PaymentResponse"
+        "409":
+          description: Payment is not in FAILED status
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/PaymentResponse"
+        "500":
+          description: Internal server error
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/PaymentResponse"
+      security:
+      - bearerAuth: []
+  /api/v1/payments/{id}/cancel:
+    post:
+      tags:
+      - Payments
+      summary: Cancel a payment
+      description: Only PENDING payments can be cancelled. Returns 409 for any other
+        status.
+      operationId: cancelPayment
+      parameters:
+      - name: id
+        in: path
+        description: Payment UUID
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: Payment cancelled successfully
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/PaymentResponse"
+        "404":
+          description: Payment not found
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/PaymentResponse"
+        "409":
+          description: Payment cannot be cancelled in its current status
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/PaymentResponse"
+        "500":
+          description: Internal server error
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/PaymentResponse"
+      security:
+      - bearerAuth: []
+  /api/v1/payments/workflows/{workflowId}/cancel:
+    post:
+      tags:
+      - Payments
+      summary: Request graceful cancellation of a running payment workflow
+      description: "Sends a cancellation signal to the workflow. It finishes the activity\
+        \ currently in flight (to avoid a partial transfer) and then routes through\
+        \ saga compensation on the next checkpoint, marking the payment FAILED with\
+        \ reason 'cancelled-by-user'. Returns 202 once the signal is accepted — poll\
+        \ GET /workflows/{workflowId}/status to observe CANCELLED."
+      operationId: cancelWorkflow
+      parameters:
+      - name: workflowId
+        in: path
+        description: Workflow ID returned by POST /api/v1/payments
+        required: true
+        schema:
+          type: string
+      - name: reason
+        in: query
+        description: "Optional free-text reason for cancellation (audit trail, max\
+          \ 500 chars)"
+        required: false
+        schema:
+          type: string
+          default: user-initiated
+      responses:
+        "202":
+          description: Cancellation signal accepted
+        "404":
+          description: Workflow not found
+        "500":
+          description: Internal server error
+      security:
+      - bearerAuth: []
+  /api/v1/auth/register:
+    post:
+      tags:
+      - Authentication
+      summary: Register a new user account
+      description: Creates a new account with ROLE_USER. Returns 409 if the username
+        is already taken.
+      operationId: register
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegistrationRequest"
+        required: true
+      responses:
+        "201":
+          description: User registered successfully
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/UserProfileResponse"
+        "400":
+          description: Validation error in request body
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/UserProfileResponse"
+        "409":
+          description: Username is already taken
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/UserProfileResponse"
+  /api/v1/auth/logout:
+    post:
+      tags:
+      - Authentication
+      summary: Invalidate the current JWT token
+      description: Blacklists the supplied Bearer token so it cannot be reused until
+        it expires naturally.
+      operationId: logout
+      parameters:
+      - name: Authorization
+        in: header
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          description: Logged out successfully
+        "400":
+          description: No valid Bearer token provided
+      security:
+      - bearerAuth: []
+  /api/v1/auth/login:
+    post:
+      tags:
+      - Authentication
+      summary: Authenticate and generate JWT token
+      operationId: login
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+        required: true
+      responses:
+        "200":
+          description: Authentication successful
+          content:
+            '*/*':
+              schema:
+                type: object
+        "400":
+          description: Missing or invalid request body
+          content:
+            '*/*':
+              schema:
+                type: object
+        "401":
+          description: Invalid credentials
+          content:
+            '*/*':
+              schema:
+                type: object
+        "500":
+          description: Internal server error
+          content:
+            '*/*':
+              schema:
+                type: object
+  /api/v1/auth/change-password:
+    post:
+      tags:
+      - Authentication
+      summary: Change the authenticated user's password
+      description: Verifies the current password then replaces it with the new one.
+        The caller's active token remains valid; log out explicitly to invalidate
+        it.
+      operationId: changePassword
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangePasswordRequest"
+        required: true
+      responses:
+        "200":
+          description: Password changed successfully
+          content:
+            '*/*':
+              schema:
+                type: object
+        "400":
+          description: Validation error in request body
+          content:
+            '*/*':
+              schema:
+                type: object
+        "401":
+          description: Current password is incorrect or no valid token provided
+          content:
+            '*/*':
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+  /api/v1/webhooks/{id}:
+    get:
+      tags:
+      - Webhooks
+      summary: Get a webhook subscription by ID
+      operationId: getSubscription
+      parameters:
+      - name: id
+        in: path
+        description: Subscription ID
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: Subscription found
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/WebhookSubscriptionResponse"
+        "403":
+          description: Subscription belongs to another user
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/WebhookSubscriptionResponse"
+        "404":
+          description: Not found
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/WebhookSubscriptionResponse"
+      security:
+      - bearerAuth: []
+    delete:
+      tags:
+      - Webhooks
+      summary: Delete a webhook subscription
+      operationId: deleteSubscription
+      parameters:
+      - name: id
+        in: path
+        description: Subscription ID
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: Deleted
+        "403":
+          description: Subscription belongs to another user
+        "404":
+          description: Not found
+      security:
+      - bearerAuth: []
+    patch:
+      tags:
+      - Webhooks
+      summary: Update a webhook subscription
+      description: All fields in the request body replace existing values. Set active=false
+        to soft-disable.
+      operationId: updateSubscription
+      parameters:
+      - name: id
+        in: path
+        description: Subscription ID
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WebhookSubscriptionRequest"
+        required: true
+      responses:
+        "200":
+          description: Subscription updated
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/WebhookSubscriptionResponse"
+        "400":
+          description: Invalid event type
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/WebhookSubscriptionResponse"
+        "403":
+          description: Ownership or adminScope violation
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/WebhookSubscriptionResponse"
+        "404":
+          description: Not found
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/WebhookSubscriptionResponse"
+      security:
+      - bearerAuth: []
+  /api/v1/payments/{id}/status:
+    patch:
+      tags:
+      - Payments
+      summary: Update payment status
+      operationId: updatePaymentStatus
+      parameters:
+      - name: id
+        in: path
+        description: Payment UUID
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PaymentStatusRequest"
+        required: true
+      responses:
+        "200":
+          description: Payment status updated successfully
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/PaymentResponse"
+        "404":
+          description: Payment not found
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/PaymentResponse"
+        "409":
+          description: Invalid status transition
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/PaymentResponse"
+        "500":
+          description: Internal server error
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/PaymentResponse"
+      security:
+      - bearerAuth: []
+  /api/v1/admin/users/{id}/role:
+    patch:
+      tags:
+      - Admin
+      summary: Update a user's role
+      description: "Changes the role of the specified user. Accepted values: ROLE_USER,\
+        \ ROLE_ADMIN. The user's cached credentials are invalidated immediately."
+      operationId: updateUserRole
+      parameters:
+      - name: id
+        in: path
+        description: User ID
+        required: true
+        schema:
+          type: integer
+          format: int64
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RoleUpdateRequest"
+        required: true
+      responses:
+        "200":
+          description: Role updated successfully
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/UserSummaryResponse"
+        "400":
+          description: Invalid role value
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/UserSummaryResponse"
+        "403":
+          description: Requires ROLE_ADMIN
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/UserSummaryResponse"
+        "404":
+          description: User not found
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/UserSummaryResponse"
+      security:
+      - bearerAuth: []
+  /api/v1/webhooks/{id}/deliveries:
+    get:
+      tags:
+      - Webhooks
+      summary: Get delivery history for a subscription (admin only)
+      description: Returns all delivery attempts for the given subscription ID.
+      operationId: getDeliveries
+      parameters:
+      - name: id
+        in: path
+        description: Subscription ID
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: Delivery list returned
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WebhookDeliveryResponse"
+        "403":
+          description: Requires ROLE_ADMIN
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WebhookDeliveryResponse"
+      security:
+      - bearerAuth: []
+  /api/v1/payments/{id}:
+    get:
+      tags:
+      - Payments
+      summary: Get a payment by ID
+      operationId: getPaymentById
+      parameters:
+      - name: id
+        in: path
+        description: Payment UUID
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: Payment found
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/PaymentResponse"
+        "404":
+          description: Payment not found
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/PaymentResponse"
+        "500":
+          description: Internal server error
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/PaymentResponse"
+      security:
+      - bearerAuth: []
+    delete:
+      tags:
+      - Payments
+      summary: Delete a payment
+      operationId: deletePayment
+      parameters:
+      - name: id
+        in: path
+        description: Payment UUID
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: Payment deleted successfully
+        "404":
+          description: Payment not found
+        "409":
+          description: Cannot delete a completed payment
+        "500":
+          description: Internal server error
+      security:
+      - bearerAuth: []
+  /api/v1/payments/{id}/transactions:
+    get:
+      tags:
+      - Payments
+      summary: List transactions for a payment
+      description: Returns all transaction records associated with the given payment.
+        Non-admin users may only retrieve transactions for payments they own.
+      operationId: getTransactionsByPaymentId
+      parameters:
+      - name: id
+        in: path
+        description: Payment UUID
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: Transactions retrieved successfully
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TransactionResponse"
+        "404":
+          description: Payment not found
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TransactionResponse"
+        "403":
+          description: "Access denied: payment belongs to another user"
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TransactionResponse"
+        "500":
+          description: Internal server error
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TransactionResponse"
+      security:
+      - bearerAuth: []
+  /api/v1/payments/workflows/{workflowId}/status:
+    get:
+      tags:
+      - Payments
+      summary: Query the live status of a payment workflow
+      description: Returns the workflow's current phase (PENDING / VALIDATING / PERSISTING
+        / TRANSFERRING / COMPLETING / NOTIFYING / COMPLETED) and the paymentId once
+        it has been persisted. Responds 200 while the workflow exists in the Temporal
+        cluster.
+      operationId: getWorkflowStatus
+      parameters:
+      - name: workflowId
+        in: path
+        description: Workflow ID returned by POST /api/v1/payments
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: Workflow status retrieved
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/WorkflowStatusResponse"
+        "404":
+          description: Workflow not found
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/WorkflowStatusResponse"
+        "500":
+          description: Internal server error
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/WorkflowStatusResponse"
+      security:
+      - bearerAuth: []
+  /api/v1/payments/source-account:
+    get:
+      tags:
+      - Payments
+      summary: Get payments by source account
+      operationId: getPaymentsBySourceAccount
+      parameters:
+      - name: sourceAccount
+        in: query
+        description: Source account number
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: Payments retrieved successfully
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PaymentResponse"
+        "500":
+          description: Internal server error
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PaymentResponse"
+      security:
+      - bearerAuth: []
+  /api/v1/payments/destination-account:
+    get:
+      tags:
+      - Payments
+      summary: Get payments by destination account
+      operationId: getPaymentsByDestinationAccount
+      parameters:
+      - name: destinationAccount
+        in: query
+        description: Destination account number
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: Payments retrieved successfully
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PaymentResponse"
+        "500":
+          description: Internal server error
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PaymentResponse"
+      security:
+      - bearerAuth: []
+  /api/v1/auth/me:
+    get:
+      tags:
+      - Authentication
+      summary: Get the authenticated user's profile
+      description: "Returns the id, username, and role of the currently authenticated\
+        \ principal."
+      operationId: getProfile
+      responses:
+        "200":
+          description: Profile returned successfully
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/UserProfileResponse"
+        "401":
+          description: No valid Bearer token provided
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/UserProfileResponse"
+      security:
+      - bearerAuth: []
+  /api/v1/admin/users:
+    get:
+      tags:
+      - Admin
+      summary: List all users (paginated)
+      description: Returns all registered users. Passwords are never included in the
+        response.
+      operationId: getUsers
+      parameters:
+      - name: pageable
+        in: query
+        required: true
+        schema:
+          $ref: "#/components/schemas/Pageable"
+      responses:
+        "200":
+          description: Users retrieved successfully
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/PagedModelUserSummaryResponse"
+        "403":
+          description: Requires ROLE_ADMIN
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/PagedModelUserSummaryResponse"
+      security:
+      - bearerAuth: []
+  /api/v1/admin/users/{id}:
+    get:
+      tags:
+      - Admin
+      summary: Get a user by ID
+      description: Returns a single user record. Passwords are never included in the
+        response.
+      operationId: getUserById
+      parameters:
+      - name: id
+        in: path
+        description: User ID
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "200":
+          description: User found
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/UserSummaryResponse"
+        "403":
+          description: Requires ROLE_ADMIN
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/UserSummaryResponse"
+        "404":
+          description: User not found
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/UserSummaryResponse"
+      security:
+      - bearerAuth: []
+    delete:
+      tags:
+      - Admin
+      summary: Delete a user
+      description: Permanently removes the user. Admins cannot delete their own account.
+      operationId: deleteUser
+      parameters:
+      - name: id
+        in: path
+        description: User ID
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "204":
+          description: User deleted successfully
+        "403":
+          description: Requires ROLE_ADMIN
+        "404":
+          description: User not found
+        "409":
+          description: Cannot delete own account
+      security:
+      - bearerAuth: []
+  /api/v1/admin/stats:
+    get:
+      tags:
+      - Admin
+      summary: Get platform statistics
+      description: "Returns real-time counts of payments by status, today's volume,\
+        \ and total user count."
+      operationId: getStats
+      responses:
+        "200":
+          description: Statistics retrieved successfully
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/AdminStatsResponse"
+        "403":
+          description: Requires ROLE_ADMIN
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/AdminStatsResponse"
+      security:
+      - bearerAuth: []
+components:
+  schemas:
+    WebhookSubscriptionRequest:
+      type: object
+      properties:
+        targetUrl:
+          type: string
+          minLength: 1
+        bearerToken:
+          type: string
+          maxLength: 512
+          minLength: 0
+        eventTypes:
+          type: array
+          items:
+            type: string
+          maxItems: 10
+          minItems: 0
+        adminScope:
+          type: boolean
+        active:
+          type: boolean
+      required:
+      - bearerToken
+      - eventTypes
+      - targetUrl
+    WebhookSubscriptionResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        userId:
+          type: integer
+          format: int64
+        targetUrl:
+          type: string
+        bearerToken:
+          type: string
+        eventTypes:
+          type: array
+          items:
+            type: string
+        adminScope:
+          type: boolean
+        active:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+    PaymentRequest:
+      type: object
+      description: Request payload for creating a new payment
+      properties:
+        sourceAccount:
+          type: string
+          description: 10-digit numeric source account number
+          example: "1234567890"
+          minLength: 1
+          pattern: "\\d{10}"
+        destinationAccount:
+          type: string
+          description: 10-digit numeric destination account number
+          example: "0987654321"
+          minLength: 1
+          pattern: "\\d{10}"
+        amount:
+          type: number
+          description: "Payment amount (positive, up to 4 decimal places, max 1,000,000)"
+          example: 100.0
+          maximum: 1000000.00
+          minimum: 0.01
+        currency:
+          type: string
+          description: ISO 4217 currency code
+          example: USD
+          minLength: 1
+          pattern: "[A-Z]{3}"
+        description:
+          type: string
+          description: "Optional payment reference or description (e.g. invoice number,\
+            \ memo)"
+          example: "Invoice #INV-2026-001"
+          maxLength: 255
+          minLength: 0
+      required:
+      - amount
+      - currency
+      - destinationAccount
+      - sourceAccount
+    PaymentWorkflowResponse:
+      type: object
+      properties:
+        workflowId:
+          type: string
+        status:
+          type: string
+        statusUrl:
+          type: string
+    ReversalRequest:
+      type: object
+      description: Request payload for initiating a payment reversal or partial refund
+      properties:
+        reason:
+          type: string
+          description: Reason for the reversal
+          example: Customer requested refund
+          maxLength: 500
+          minLength: 10
+        referenceId:
+          type: string
+          description: Optional external reference ID for tracking
+          example: REF-2026-001
+          maxLength: 100
+          minLength: 0
+        partialReversal:
+          type: boolean
+          default: false
+          description: Set to true to reverse only part of the payment amount
+        reversalAmount:
+          type: number
+          description: Amount to reverse (required when partialReversal=true)
+          example: 50.0
+          minimum: 0.01
+        notes:
+          type: string
+          description: Optional additional notes about the reversal
+          maxLength: 1000
+          minLength: 0
+      required:
+      - reason
+    PaymentResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        sourceAccount:
+          type: string
+        destinationAccount:
+          type: string
+        amount:
+          type: number
+        currency:
+          type: string
+        status:
+          type: string
+        statusDescription:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        description:
+          type: string
+        transactionId:
+          type: string
+        message:
+          type: string
+    RegistrationRequest:
+      type: object
+      description: Request payload for registering a new user account
+      properties:
+        username:
+          type: string
+          description: "Desired username (3–50 chars, alphanumeric and underscores\
+            \ only)"
+          example: john_doe
+          maxLength: 50
+          minLength: 3
+          pattern: "^[a-zA-Z0-9_]+$"
+        password:
+          type: string
+          description: "Password (8–100 characters, must include at least one uppercase\
+            \ letter and one digit)"
+          example: SecurePass123!
+          maxLength: 100
+          minLength: 8
+          pattern: "^(?=.*[A-Z])(?=.*[0-9]).{8,100}$"
+      required:
+      - password
+      - username
+    UserProfileResponse:
+      type: object
+      description: Profile of the currently authenticated user
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Internal user ID
+          example: 1
+        username:
+          type: string
+          description: Username
+          example: admin
+        role:
+          type: string
+          description: Granted role
+          example: ROLE_ADMIN
+        createdAt:
+          type: string
+          format: date-time
+          description: Account creation timestamp
+    LoginRequest:
+      type: object
+      properties:
+        username:
+          type: string
+          minLength: 1
+        password:
+          type: string
+          minLength: 1
+      required:
+      - password
+      - username
+    ChangePasswordRequest:
+      type: object
+      description: Request payload for changing the authenticated user's password
+      properties:
+        currentPassword:
+          type: string
+          description: The user's existing password
+          example: currentPass123
+          minLength: 1
+        newPassword:
+          type: string
+          description: The new password (minimum 8 characters)
+          example: newSecurePass456
+          maxLength: 100
+          minLength: 8
+      required:
+      - currentPassword
+      - newPassword
+    PaymentStatusRequest:
+      type: object
+      description: Request payload for updating a payment's status
+      properties:
+        status:
+          type: string
+          description: Target payment status
+          enum:
+          - PENDING
+          - PROCESSING
+          - COMPLETED
+          - FAILED
+          - CANCELLED
+          - REVERSED
+          - REFUNDED
+          example: COMPLETED
+          minLength: 1
+          pattern: PENDING|PROCESSING|COMPLETED|FAILED|CANCELLED|REVERSED|REFUNDED
+      required:
+      - status
+    RoleUpdateRequest:
+      type: object
+      properties:
+        role:
+          type: string
+          minLength: 1
+          pattern: ROLE_USER|ROLE_ADMIN
+      required:
+      - role
+    UserSummaryResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        username:
+          type: string
+        role:
+          type: string
+    WebhookDeliveryResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        subscriptionId:
+          type: string
+        paymentId:
+          type: string
+        eventType:
+          type: string
+        status:
+          type: string
+        attemptCount:
+          type: integer
+          format: int32
+        lastAttemptAt:
+          type: string
+          format: date-time
+        nextRetryAt:
+          type: string
+          format: date-time
+        responseStatus:
+          type: integer
+          format: int32
+        createdAt:
+          type: string
+          format: date-time
+    Pageable:
+      type: object
+      properties:
+        page:
+          type: integer
+          format: int32
+          minimum: 0
+        size:
+          type: integer
+          format: int32
+          minimum: 1
+        sort:
+          type: array
+          items:
+            type: string
+    PageMetadata:
+      type: object
+      properties:
+        size:
+          type: integer
+          format: int64
+        number:
+          type: integer
+          format: int64
+        totalElements:
+          type: integer
+          format: int64
+        totalPages:
+          type: integer
+          format: int64
+    PagedModelPaymentResponse:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/PaymentResponse"
+        page:
+          $ref: "#/components/schemas/PageMetadata"
+    TransactionResponse:
+      type: object
+      description: A banking transaction associated with a payment
+      properties:
+        id:
+          type: string
+          description: Transaction UUID
+        paymentId:
+          type: string
+          description: ID of the payment this transaction belongs to
+        status:
+          type: string
+          description: "Transaction status (PENDING, SUCCESS, FAILED)"
+        failureReason:
+          type: string
+          description: Failure reason if the transaction failed
+        createdAt:
+          type: string
+          format: date-time
+          description: Timestamp when the transaction was created
+        updatedAt:
+          type: string
+          format: date-time
+          description: Timestamp when the transaction was last updated
+    WorkflowStatusResponse:
+      type: object
+      properties:
+        workflowId:
+          type: string
+        status:
+          type: string
+        paymentId:
+          type: string
+    PagedModelUserSummaryResponse:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/UserSummaryResponse"
+        page:
+          $ref: "#/components/schemas/PageMetadata"
+    AdminStatsResponse:
+      type: object
+      properties:
+        totalPayments:
+          type: integer
+          format: int64
+        paymentsByStatus:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int64
+        todayPaymentCount:
+          type: integer
+          format: int64
+        todayVolume:
+          type: number
+        totalUsers:
+          type: integer
+          format: int64
+        generatedAt:
+          type: string
+          format: date-time
+  securitySchemes:
+    bearerAuth:
+      type: http
+      name: bearerAuth
+      scheme: bearer
+      bearerFormat: JWT
