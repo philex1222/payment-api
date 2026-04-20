@@ -47,5 +47,16 @@ public class DataInitializer implements CommandLineRunner {
             userRepository.save(regularUser);
             logger.info("Created default regular user");
         }
+
+        // Seed the demo user referenced by the Postman "payment-api — Local" environment
+        // so the collection works out-of-the-box against a fresh H2 instance.
+        if (userRepository.findByUsername("demo").isEmpty()) {
+            User demo = new User();
+            demo.setUsername("demo");
+            demo.setPassword(passwordEncoder.encode("Secret123!"));
+            demo.setRole("ROLE_USER");
+            userRepository.save(demo);
+            logger.info("Created default demo user");
+        }
     }
 }
