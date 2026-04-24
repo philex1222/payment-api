@@ -25,6 +25,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import io.temporal.api.enums.v1.WorkflowIdReusePolicy;
 import io.temporal.client.WorkflowClient;
+import io.temporal.client.WorkflowExecutionAlreadyStarted;
 import io.temporal.client.WorkflowOptions;
 import io.temporal.client.WorkflowStub;
 import jakarta.validation.Valid;
@@ -142,13 +143,19 @@ public class PaymentController {
                         .setWorkflowRunTimeout(temporalProperties.getWorkflow().getRunTimeout())
                         .setWorkflowTaskTimeout(temporalProperties.getWorkflow().getTaskTimeout())
                         .build());
-        stub.start(paymentRequest, initiatedBy);
-        workflowMetrics.recordStarted(hasIdempotencyKey);
-
         String statusUrl = "/api/v1/payments/workflows/" + workflowId + "/status";
         PaymentWorkflowResponse wfResponse = new PaymentWorkflowResponse(workflowId, "PENDING", statusUrl);
 
-        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
+        try {
+            stub.start(paymentRequest, initiatedBy);
+            workflowMetrics.recordStarted(hasIdempotencyKey);
+        } catch (WorkflowExecutionAlreadyStarted e) {
+            if (!hasIdempotencyKey) {
+                throw e;
+            }
+        }
+
+        if (hasIdempotencyKey) {
             idempotencyService.store(idempotencyKey, wfResponse);
         }
 

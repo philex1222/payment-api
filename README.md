@@ -28,7 +28,7 @@ A production-grade RESTful microservice for payment processing built with Spring
 - **Multi-currency** — ISO 4217 currency codes with automatic conversion
 - **Retry** — automatic retry of FAILED payments via scheduler + manual retry endpoint (configurable max attempts)
 - **Reversal & refund** — full reversal or partial refund of COMPLETED payments
-- **Idempotency** — `Idempotency-Key` header prevents duplicate charges on network retries (Redis-backed, 24h TTL)
+- **Idempotency** — `Idempotency-Key` header prevents duplicate charges on network retries (Redis-backed, 24h TTL + Temporal workflow dedupe)
 - **BOLA protection** — users can only read/modify their own payments; ROLE_ADMIN bypasses all ownership checks
 - **JWT authentication** — HS512, audience-validated (`aud=payment-api`), configurable expiry; logout blacklists tokens
 - **User registration** — `POST /api/v1/auth/register`; validates username pattern and password complexity (min 8, uppercase + digit); returns `createdAt`
@@ -53,7 +53,7 @@ A production-grade RESTful microservice for payment processing built with Spring
 | Runtime | Java 21, Spring Boot 3.5.13 |
 | Security | Spring Security 6, jjwt 0.13.0 (HS512), BCrypt |
 | Persistence | Spring Data JPA, Hibernate, MySQL 8.4 (prod), H2 (local/test) |
-| Migrations | Flyway 11 (V1–V11) |
+| Migrations | Flyway 11 (V1–V14) |
 | Cache / Idempotency | Redis 7.4 (docker), Simple in-memory (local) |
 | Resilience | Resilience4j 2.4.0 — circuit breaker, retry, rate limiter, time limiter |
 | Metrics | Micrometer + Prometheus + Grafana |

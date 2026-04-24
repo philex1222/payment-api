@@ -11,6 +11,7 @@ import org.springframework.stereotype.Repository;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface PaymentRepository extends JpaRepository<Payment, String>, JpaSpecificationExecutor<Payment> {
@@ -19,6 +20,7 @@ public interface PaymentRepository extends JpaRepository<Payment, String>, JpaSp
     List<Payment> findByDestinationAccount(String destinationAccount);
     List<Payment> findByDestinationAccountAndCreatedBy(String destinationAccount, String createdBy);
     List<Payment> findByStatusAndRetryCountLessThan(String status, int maxRetryCount);
+    Optional<Payment> findByTemporalWorkflowId(String temporalWorkflowId);
 
     /** Returns [status, count] pairs for all known statuses — used by admin stats. */
     @Query("SELECT p.status, COUNT(p) FROM Payment p GROUP BY p.status")

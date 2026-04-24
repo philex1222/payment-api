@@ -74,6 +74,13 @@ public class Payment {
     @Column(name = "created_by", length = 50)
     private String createdBy;
 
+    /**
+     * Temporal workflow id that created this payment.
+     * Nullable for rows created before Temporal orchestration or by legacy paths.
+     */
+    @Column(name = "temporal_workflow_id", length = 255, unique = true)
+    private String temporalWorkflowId;
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;

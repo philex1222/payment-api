@@ -58,6 +58,44 @@ class PaymentPersistenceActivitiesImplTest {
     }
 
     @Test
+    void persistPending_existingTemporalWorkflowId_returnsExistingPaymentId() {
+        PaymentRequest req = new PaymentRequest(
+                "src", "dst", BigDecimal.valueOf(100), "USD", "test");
+        Payment existing = new Payment();
+        existing.setId("pay-existing");
+
+        PaymentPersistenceActivitiesImpl spy = spy(activities);
+        doReturn("wf-123").when(spy).currentWorkflowId();
+        when(paymentRepository.findByTemporalWorkflowId("wf-123")).thenReturn(Optional.of(existing));
+
+        String result = spy.persistPending(req, "admin");
+
+        assertEquals("pay-existing", result);
+        verify(paymentRepository, never()).save(any(Payment.class));
+        verify(transactionService, never()).createTransaction(anyString());
+        verify(auditService, never()).logPaymentEvent(anyString(), anyString());
+    }
+
+    @Test
+    void persistPending_newTemporalWorkflowId_setsWorkflowIdOnPayment() {
+        PaymentRequest req = new PaymentRequest(
+                "src", "dst", BigDecimal.valueOf(100), "USD", "test");
+        Payment saved = new Payment();
+        saved.setId("pay-new");
+        ArgumentCaptor<Payment> captor = ArgumentCaptor.forClass(Payment.class);
+
+        PaymentPersistenceActivitiesImpl spy = spy(activities);
+        doReturn("wf-456").when(spy).currentWorkflowId();
+        when(paymentRepository.findByTemporalWorkflowId("wf-456")).thenReturn(Optional.empty());
+        when(paymentRepository.save(captor.capture())).thenReturn(saved);
+
+        String result = spy.persistPending(req, "admin");
+
+        assertEquals("pay-new", result);
+        assertEquals("wf-456", captor.getValue().getTemporalWorkflowId());
+    }
+
+    @Test
     void persistPending_setsStatusToPending() {
         PaymentRequest req = new PaymentRequest(
                 "src", "dst", BigDecimal.valueOf(50), "EUR", null);
@@ -108,6 +146,20 @@ class PaymentPersistenceActivitiesImplTest {
     }
 
     @Test
+    void completePayment_alreadyCompleted_isIdempotentNoOp() {
+        Payment payment = new Payment();
+        payment.setId("pay-456");
+        payment.setStatus(PaymentStatus.COMPLETED.getCode());
+        when(paymentRepository.findById("pay-456")).thenReturn(Optional.of(payment));
+
+        activities.completePayment("pay-456");
+
+        verify(paymentRepository, never()).save(any(Payment.class));
+        verify(auditService, never()).logPaymentEvent(anyString(), anyString());
+        verify(workflowMetrics, never()).recordCompleted();
+    }
+
+    @Test
     void completePayment_throwsWhenPaymentNotFound() {
         when(paymentRepository.findById("missing")).thenReturn(Optional.empty());
         assertThrows(ApplicationFailure.class,
@@ -129,6 +181,34 @@ class PaymentPersistenceActivitiesImplTest {
         assertEquals(PaymentStatus.FAILED.getCode(), payment.getStatus());
         verify(auditService).logPaymentEvent("pay-789", PaymentConstants.AUDIT_PAYMENT_FAILED);
         verify(workflowMetrics).recordFailed("Transfer failed");
+    }
+
+    @Test
+    void failPayment_alreadyFailed_isIdempotentNoOp() {
+        Payment payment = new Payment();
+        payment.setId("pay-789");
+        payment.setStatus(PaymentStatus.FAILED.getCode());
+        when(paymentRepository.findById("pay-789")).thenReturn(Optional.of(payment));
+
+        activities.failPayment("pay-789", "Transfer failed");
+
+        verify(paymentRepository, never()).save(any(Payment.class));
+        verify(auditService, never()).logPaymentEvent(anyString(), anyString());
+        verify(workflowMetrics, never()).recordFailed(anyString());
+    }
+
+    @Test
+    void failPayment_completedPayment_isNotDowngradedToFailed() {
+        Payment payment = new Payment();
+        payment.setId("pay-789");
+        payment.setStatus(PaymentStatus.COMPLETED.getCode());
+        when(paymentRepository.findById("pay-789")).thenReturn(Optional.of(payment));
+
+        activities.failPayment("pay-789", "late compensation");
+
+        assertEquals(PaymentStatus.COMPLETED.getCode(), payment.getStatus());
+        verify(paymentRepository, never()).save(any(Payment.class));
+        verify(workflowMetrics, never()).recordFailed(anyString());
     }
 
     @Test

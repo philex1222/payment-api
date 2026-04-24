@@ -154,8 +154,9 @@ paths:
       - Payments
       summary: Create a new payment
       description: "Starts a durable Temporal workflow. Returns 202 Accepted + workflowId.\
-        \ Poll GET /api/v1/payments/{paymentId} until status leaves PENDING. Optionally\
-        \ supply an 'Idempotency-Key' header to prevent duplicate charges."
+        \ Poll GET /api/v1/payments/workflows/{workflowId}/status until a paymentId\
+        \ is available, then GET /api/v1/payments/{paymentId}. Optionally supply an\
+        \ 'Idempotency-Key' header to prevent duplicate charges."
       operationId: createPayment
       parameters:
       - name: Idempotency-Key
@@ -827,7 +828,7 @@ paths:
       - Payments
       summary: Query the live status of a payment workflow
       description: Returns the workflow's current phase (PENDING / VALIDATING / PERSISTING
-        / TRANSFERRING / COMPLETING / NOTIFYING / COMPLETED) and the paymentId once
+        / TRANSFERRING / COMPLETING / NOTIFYING / COMPLETED / CANCELLING / CANCELLED) and the paymentId once
         it has been persisted. Responds 200 while the workflow exists in the Temporal
         cluster.
       operationId: getWorkflowStatus

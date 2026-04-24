@@ -422,6 +422,33 @@ public class PaymentControllerTest {
     }
 
     @Test
+    public void testCreatePayment_withIdempotencyKey_temporalDuplicate_returnsAccepted() throws Exception {
+        when(idempotencyService.get("idem-42")).thenReturn(Optional.empty());
+        WorkflowStub mockStub = stubWorkflowStub();
+        when(mockStub.start(any(PaymentRequest.class), eq("admin")))
+                .thenThrow(new io.temporal.client.WorkflowExecutionAlreadyStarted(
+                        io.temporal.api.common.v1.WorkflowExecution.newBuilder()
+                                .setWorkflowId("payment-idem-42")
+                                .build(),
+                        "PaymentCreationWorkflow",
+                        new RuntimeException("already started")));
+        PaymentRequest req = new PaymentRequest("1234567890", "0987654321",
+                BigDecimal.valueOf(100), "USD", null);
+
+        mockMvc.perform(post("/api/v1/payments")
+                        .header("Authorization", token)
+                        .header(IDEMPOTENCY_KEY_HEADER, "idem-42")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.workflowId").value("payment-idem-42"))
+                .andExpect(jsonPath("$.status").value("PENDING"));
+
+        verify(idempotencyService).store(eq("idem-42"), any(PaymentWorkflowResponse.class));
+        verify(workflowMetrics, never()).recordStarted(anyBoolean());
+    }
+
+    @Test
     public void testCreatePayment_idempotencyKeyExceedsMaxLength_returns400() throws Exception {
         String oversized = "x".repeat(129);
         PaymentRequest req = new PaymentRequest("1234567890", "0987654321",

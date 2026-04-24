@@ -2,6 +2,7 @@ package com.example.paymentapi.temporal.activity;
 
 import com.example.paymentapi.dto.PaymentResponse;
 import com.example.paymentapi.model.Payment;
+import com.example.paymentapi.model.PaymentStatus;
 import com.example.paymentapi.model.WebhookEventType;
 import com.example.paymentapi.repository.PaymentRepository;
 import com.example.paymentapi.service.NotificationService;
@@ -15,10 +16,12 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.lang.reflect.Method;
 import java.util.Optional;
 
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
@@ -73,16 +76,29 @@ class PaymentNotificationActivitiesImplTest {
     void publishWebhookEvent_loadsPaymentAndPublishes() {
         Payment payment = new Payment();
         payment.setId("pay-001");
+        payment.setStatus(PaymentStatus.COMPLETED.getCode());
         PaymentResponse response = new PaymentResponse();
         response.setId("pay-001");
 
         when(paymentRepository.findById("pay-001")).thenReturn(Optional.of(payment));
         when(mapper.toResponse(payment)).thenReturn(response);
+        when(eventPublisher.resolveEventType(PaymentStatus.COMPLETED))
+                .thenReturn(WebhookEventType.PAYMENT_COMPLETED);
 
         activities.publishWebhookEvent("pay-001", "admin");
 
         verify(eventPublisher).publish(
-                eq(WebhookEventType.PAYMENT_CREATED), eq("admin"), eq(response));
+                eq(WebhookEventType.PAYMENT_COMPLETED), eq("admin"), eq(response));
+    }
+
+    @Test
+    void publishWebhookEvent_isTransactionalSoAfterCommitListenerFires() throws Exception {
+        Method method = PaymentNotificationActivitiesImpl.class
+                .getMethod("publishWebhookEvent", String.class, String.class);
+        Transactional transactional = method.getAnnotation(Transactional.class);
+
+        assertNotNull(transactional);
+        assertTrue(transactional.readOnly());
     }
 
     @Test
@@ -96,9 +112,12 @@ class PaymentNotificationActivitiesImplTest {
     void publishWebhookEvent_propagatesPublisherException() {
         Payment payment = new Payment();
         payment.setId("pay-002");
+        payment.setStatus(PaymentStatus.COMPLETED.getCode());
         PaymentResponse response = new PaymentResponse();
         when(paymentRepository.findById("pay-002")).thenReturn(Optional.of(payment));
         when(mapper.toResponse(payment)).thenReturn(response);
+        when(eventPublisher.resolveEventType(PaymentStatus.COMPLETED))
+                .thenReturn(WebhookEventType.PAYMENT_COMPLETED);
         doThrow(new RuntimeException("Webhook failed")).when(eventPublisher)
                 .publish(any(), anyString(), any());
 

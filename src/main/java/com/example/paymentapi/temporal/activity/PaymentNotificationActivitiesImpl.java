@@ -2,7 +2,7 @@ package com.example.paymentapi.temporal.activity;
 
 import com.example.paymentapi.dto.PaymentResponse;
 import com.example.paymentapi.model.Payment;
-import com.example.paymentapi.model.WebhookEventType;
+import com.example.paymentapi.model.PaymentStatus;
 import com.example.paymentapi.repository.PaymentRepository;
 import com.example.paymentapi.service.NotificationService;
 import com.example.paymentapi.service.UserService;
@@ -11,6 +11,7 @@ import com.example.paymentapi.service.shared.PaymentMapper;
 import com.example.paymentapi.temporal.config.TemporalProperties;
 import io.temporal.failure.ApplicationFailure;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class PaymentNotificationActivitiesImpl implements PaymentNotificationActivities {
@@ -47,13 +48,17 @@ public class PaymentNotificationActivitiesImpl implements PaymentNotificationAct
     }
 
     @Override
+    @Transactional(readOnly = true)
     public void publishWebhookEvent(String paymentId, String createdBy) {
         try (ActivityMdcSupport.Scope ignored = ActivityMdcSupport.open()) {
             Payment payment = paymentRepository.findById(paymentId)
                     .orElseThrow(() -> ApplicationFailure.newNonRetryableFailure(
                             "Payment not found: " + paymentId, ERR_PAYMENT_NOT_FOUND));
             PaymentResponse response = mapper.toResponse(payment);
-            eventPublisher.publish(WebhookEventType.PAYMENT_CREATED, createdBy, response);
+            eventPublisher.publish(
+                    eventPublisher.resolveEventType(PaymentStatus.fromString(payment.getStatus())),
+                    createdBy,
+                    response);
         }
     }
 
