@@ -34,10 +34,15 @@ RUN java -Djarmode=layertools -jar app.jar extract
 FROM eclipse-temurin:21-jre-jammy
 WORKDIR /app
 
+# CI/CD passes a per-run value so the security patch layer is refreshed even
+# when Docker's remote cache can reuse the rest of the image build.
+ARG SECURITY_PATCH_EPOCH=local
+
 # Upgrade all packages to apply latest security patches before locking down to
 # a non-root user. Also installs wget for the HEALTHCHECK (not pre-installed in
 # the jammy JRE image unlike Alpine).
-RUN apt-get update \
+RUN echo "Refreshing OS security patches: ${SECURITY_PATCH_EPOCH}" \
+    && apt-get update \
     && apt-get upgrade -y --no-install-recommends \
     && apt-get install -y --no-install-recommends wget \
     && rm -rf /var/lib/apt/lists/*

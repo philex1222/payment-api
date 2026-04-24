@@ -250,6 +250,8 @@ jobs:
           context: .
           push: false
           tags: payment-api:${{ github.sha }}
+          build-args: |
+            SECURITY_PATCH_EPOCH=${{ github.run_id }}-${{ github.run_attempt }}
           cache-from: ${{ github.event_name != 'schedule' && 'type=gha' || '' }}
           cache-to: ${{ github.event_name != 'schedule' && 'type=gha,mode=max' || '' }}
           no-cache: ${{ github.event_name == 'schedule' }}
