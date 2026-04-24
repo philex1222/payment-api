@@ -178,7 +178,7 @@ jobs:
       # Secret scan: fail the build immediately if any secret pattern is found.
       # This is a hard gate — committed secrets are always wrong.
       - name: Scan for hardcoded secrets (blocking)
-        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: fs
           scan-ref: .
@@ -189,7 +189,7 @@ jobs:
       # Vulnerability + misconfiguration scan: informational, SARIF upload only.
       # Enforcement is handled by the container scan (job 4) and OWASP (job 5).
       - name: Scan for CVEs and misconfigurations (informational)
-        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         if: always()
         with:
           scan-type: fs
@@ -261,7 +261,7 @@ jobs:
       # ignore-unfixed=true skips CVEs with no patch yet (nothing actionable).
       # When this fails, update the base image or vulnerable dependency.
       - name: Scan image with Trivy (CRITICAL & HIGH CVEs)
-        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: payment-api:${{ github.sha }}
           format: sarif
