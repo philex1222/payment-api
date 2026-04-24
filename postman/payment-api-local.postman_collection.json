@@ -1,0 +1,227 @@
+{
+  "info": {
+    "name": "payment-api - Local Smoke",
+    "description": "Local smoke tests for a standalone payment-api startup. The local profile seeds demo users and disables Temporal by default, so this collection avoids workflow endpoints and verifies the always-available API surface.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health is UP",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/actuator/health"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('service reports UP', function () {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.status).to.eql('UP');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Login demo user",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/auth/login"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('login returns 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('token is returned', function () {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.token).to.be.a('string').and.not.empty;",
+                  "  pm.environment.set('authToken', body.token);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get demo profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/auth/me"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('profile returns 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('profile belongs to demo user', function () {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.username).to.eql(pm.environment.get('username'));",
+                  "  pm.expect(body.role).to.eql('ROLE_USER');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Register unique user",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set('registeredUsername', 'postman_' + Date.now());",
+                  "pm.environment.set('registeredPassword', 'Postman123');"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('registration returns 201', function () { pm.response.to.have.status(201); });",
+                  "pm.test('registered profile is returned', function () {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.username).to.eql(pm.environment.get('registeredUsername'));",
+                  "  pm.expect(body.role).to.eql('ROLE_USER');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{registeredUsername}}\",\n  \"password\": \"{{registeredPassword}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/auth/register"
+          }
+        },
+        {
+          "name": "Login registered user",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{registeredUsername}}\",\n  \"password\": \"{{registeredPassword}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/auth/login"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('registered login returns 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('registered token is returned', function () {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.token).to.be.a('string').and.not.empty;",
+                  "  pm.environment.set('registeredToken', body.token);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Logout registered user",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{registeredToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/auth/logout"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('logout returns 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Logged-out token is rejected",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{registeredToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/auth/me"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('profile with logged-out token returns 401', function () { pm.response.to.have.status(401); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

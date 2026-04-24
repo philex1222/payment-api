@@ -5,11 +5,13 @@ import com.example.paymentapi.repository.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 @Component
+@ConditionalOnProperty(prefix = "app.seed", name = "default-users", havingValue = "true")
 public class DataInitializer implements CommandLineRunner {
     private static final Logger logger = LoggerFactory.getLogger(DataInitializer.class);
 
@@ -24,7 +26,8 @@ public class DataInitializer implements CommandLineRunner {
     @Override
     @Transactional
     public void run(String... args) {
-        // Only create admin user if it doesn't exist
+        // Local/test fixture users only. Production leaves user bootstrap to
+        // deployment-specific provisioning instead of shipping known passwords.
         if (userRepository.findByUsername("admin").isEmpty()) {
             User admin = new User();
             admin.setUsername("admin");

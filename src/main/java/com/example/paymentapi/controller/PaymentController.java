@@ -29,6 +29,7 @@ import io.temporal.client.WorkflowExecutionAlreadyStarted;
 import io.temporal.client.WorkflowOptions;
 import io.temporal.client.WorkflowStub;
 import jakarta.validation.Valid;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -45,6 +46,7 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/payments")
+@ConditionalOnBean(WorkflowClient.class)
 @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
 @Tag(name = "Payments", description = "Operations related to payment processing")
 @SecurityRequirement(name = "bearerAuth")

@@ -6,7 +6,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.5.13</version>
+        <version>3.5.14</version>
         <relativePath/> <!-- lookup parent from repository -->
     </parent>
     <groupId>com.example</groupId>
@@ -16,6 +16,7 @@
     <description>Payment API project</description>
     <properties>
         <java.version>21</java.version>
+        <maven-enforcer-plugin.version>3.6.2</maven-enforcer-plugin.version>
         <h2.version>2.4.240</h2.version>
         <rest-assured.version>6.0.0</rest-assured.version>
         <jjwt.version>0.13.0</jjwt.version>
@@ -30,7 +31,9 @@
         <cucumber.version>7.22.1</cucumber.version>
         <resilience4j.version>2.4.0</resilience4j.version>
         <!--
-          Pin Tomcat ahead of the Spring Boot 3.5.13 BOM (ships 10.1.53).
+          Keep Tomcat pinned explicitly for security-review visibility. The
+          Spring Boot BOM may already manage this patch level, but the property
+          makes future vulnerability-driven updates intentional in this POM.
           10.1.54 fixes all HIGH CVEs found by Trivy as of 2026-04-15:
             CVE-2025-48988 (fixed 10.1.42) — multipart DoS
             CVE-2025-52520 (fixed 10.1.43) — integer overflow multipart
@@ -46,17 +49,17 @@
         -->
         <tomcat.version>10.1.54</tomcat.version>
         <!--
-          Override Flyway within the 11.x line (Spring Boot BOM ships 11.7.2).
-          11.8.x and 11.9.x are minor bug-fix releases with no breaking API changes.
+          Override Flyway within the 11.x line for latest bug fixes while
+          staying on the same major version.
           Flyway 12.x is a major version and requires separate assessment before adoption.
         -->
-        <flyway.version>11.9.2</flyway.version>
+        <flyway.version>11.20.3</flyway.version>
         <!--
-          Override httpclient5 ahead of the Spring Boot BOM (ships 5.5.2).
-          5.6 is the latest GA release with connection-pool and TLS improvements.
+          Override httpclient5 ahead of the Spring Boot BOM for latest 5.x
+          connection-pool and TLS fixes.
           Same major version — API-compatible.
         -->
-        <httpclient5.version>5.6</httpclient5.version>
+        <httpclient5.version>5.6.1</httpclient5.version>
         <!--
           Temporal Java SDK used by workflow, client, worker, and test integrations.
           Keep temporal-sdk and temporal-testing aligned through this single property;
@@ -328,6 +331,31 @@
 
     <build>
         <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <version>${maven-enforcer-plugin.version}</version>
+                <executions>
+                    <execution>
+                        <id>enforce-toolchain-baseline</id>
+                        <phase>validate</phase>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <requireMavenVersion>
+                                    <version>[3.9.0,)</version>
+                                </requireMavenVersion>
+                                <requireJavaVersion>
+                                    <version>[21,)</version>
+                                </requireJavaVersion>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>

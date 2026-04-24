@@ -1,6 +1,7 @@
 package com.example.paymentapi.config;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Base64;
@@ -10,8 +11,14 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class AesGcmAttributeConverterTest {
 
-    // Uses the default dev key (secretKeyBase64 is null → DEV_KEY used internally)
-    private final AesGcmAttributeConverter converter = new AesGcmAttributeConverter();
+    private AesGcmAttributeConverter converter;
+
+    @BeforeEach
+    void setUp() {
+        converter = new AesGcmAttributeConverter();
+        ReflectionTestUtils.setField(converter, "allowDevKey", true);
+        ReflectionTestUtils.invokeMethod(converter, "init");
+    }
 
     @Test
     void roundTrip_encryptThenDecrypt() {
@@ -55,6 +62,7 @@ class AesGcmAttributeConverterTest {
         byte[] key = new byte[32];
         for (int i = 0; i < 32; i++) key[i] = (byte) i;
         ReflectionTestUtils.setField(custom, "secretKeyBase64", Base64.getEncoder().encodeToString(key));
+        ReflectionTestUtils.invokeMethod(custom, "init");
         String plaintext = "custom-key-token";
         String encrypted = custom.convertToDatabaseColumn(plaintext);
         assertThat(custom.convertToEntityAttribute(encrypted)).isEqualTo(plaintext);
@@ -83,5 +91,24 @@ class AesGcmAttributeConverterTest {
         assertThatThrownBy(() -> badKey.convertToDatabaseColumn("x"))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("encrypt");
+    }
+
+    @Test
+    void init_blankKeyWithoutDevFallback_throwsIllegalState() {
+        AesGcmAttributeConverter strict = new AesGcmAttributeConverter();
+        ReflectionTestUtils.setField(strict, "allowDevKey", false);
+        assertThatThrownBy(() -> ReflectionTestUtils.invokeMethod(strict, "init"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("webhook.encryption.secret-key");
+    }
+
+    @Test
+    void init_keyWithWrongLength_throwsIllegalState() {
+        AesGcmAttributeConverter strict = new AesGcmAttributeConverter();
+        ReflectionTestUtils.setField(strict, "secretKeyBase64",
+                Base64.getEncoder().encodeToString(new byte[16]));
+        assertThatThrownBy(() -> ReflectionTestUtils.invokeMethod(strict, "init"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("exactly 32 bytes");
     }
 }

@@ -50,18 +50,18 @@ A production-grade RESTful microservice for payment processing built with Spring
 
 | Layer | Technology |
 |---|---|
-| Runtime | Java 21, Spring Boot 3.5.13 |
+| Runtime | Java 21, Spring Boot 3.5.14 |
 | Security | Spring Security 6, jjwt 0.13.0 (HS512), BCrypt |
 | Persistence | Spring Data JPA, Hibernate, MySQL 8.4 (prod), H2 (local/test) |
-| Migrations | Flyway 11 (V1–V14) |
+| Migrations | Flyway 11.20.x (V1-V14) |
 | Cache / Idempotency | Redis 7.4 (docker), Simple in-memory (local) |
 | Resilience | Resilience4j 2.4.0 — circuit breaker, retry, rate limiter, time limiter |
 | Metrics | Micrometer + Prometheus + Grafana |
 | Tracing | Micrometer Tracing + Brave + Zipkin |
-| Logging | Logback + Logstash encoder 8.1 |
-| Docs | SpringDoc OpenAPI 2.8.9 |
-| Testing | REST Assured 5.5.x, Cucumber-JVM 7.22, JUnit 5, Mockito |
-| Build | Maven, JaCoCo 0.8.14 |
+| Logging | Logback + Logstash encoder 9.0 |
+| Docs | SpringDoc OpenAPI 2.8.17 |
+| Testing | REST Assured 6.0.0, Cucumber-JVM 7.22, JUnit 5, Mockito, Newman/Postman |
+| Build | Maven 3.9+, JaCoCo 0.8.14, Maven Enforcer |
 | Container | Docker (multi-stage, layered JAR), docker-compose |
 | CI/CD | GitHub Actions (5-job CI + 3-job CD) |
 | Deployment | Helm 3, Kubernetes |
@@ -70,7 +70,7 @@ A production-grade RESTful microservice for payment processing built with Spring
 
 ## Quick Start -- Local Dev
 
-No external services required. The `local` profile uses H2 in-memory database and simple in-memory cache.
+No external services required. The `local` profile uses H2 in-memory database, simple in-memory cache, and disables Temporal by default so the app can start standalone. Start a Temporal dev server and run with `-Dtemporal.enabled=true` when you need live payment workflow endpoints.
 
 ### Prerequisites
 
@@ -98,14 +98,15 @@ GET  http://localhost:8080/swagger-ui/index.html   -> OpenAPI UI
 GET  http://localhost:8080/h2-console              -> (JDBC URL: jdbc:h2:mem:localdb)
 ```
 
-### Default users (seeded by `DataInitializer`)
+### Local default users
 
 | Username | Password | Role |
 |---|---|---|
 | `admin` | `password` | ROLE_ADMIN |
 | `user` | `password` | ROLE_USER |
+| `demo` | `Secret123!` | ROLE_USER |
 
-> These are for development only. Production deployments should disable `DataInitializer` or use strong passwords via environment variables.
+These users are seeded only when `app.seed.default-users=true`, which is enabled in the `local` and `test` profiles. Docker and production profiles do not create known-password users.
 
 ---
 
@@ -118,8 +119,9 @@ GET  http://localhost:8080/h2-console              -> (JDBC URL: jdbc:h2:mem:loc
 
 ```bash
 cp .env.example .env
-# Edit .env -- set strong values for JWT_SECRET, DB_PASSWORD, REDIS_PASSWORD, etc.
+# Edit .env -- set strong values for JWT_SECRET, WEBHOOK_ENCRYPTION_KEY, DB_PASSWORD, REDIS_PASSWORD, etc.
 # Generate JWT secret: openssl rand -hex 64
+# Generate webhook encryption key: openssl rand -base64 32
 ```
 
 ### Start the full stack
@@ -148,6 +150,7 @@ curl http://localhost:19090/-/healthy   # Prometheus
 | `DB_PASSWORD` | MySQL application password | Yes |
 | `MYSQL_ROOT_PASSWORD` | MySQL root password (init only, not used at runtime) | Yes |
 | `REDIS_PASSWORD` | Redis AUTH password | Yes |
+| `WEBHOOK_ENCRYPTION_KEY` | Base64-encoded 32-byte AES-GCM key (`openssl rand -base64 32`) | Yes |
 | `GF_ADMIN_PASSWORD` | Grafana admin password | Yes |
 | `CORS_ALLOWED_ORIGINS` | Comma-separated allowed origins | Yes |
 | `MANAGEMENT_TRACING_SAMPLING_PROBABILITY` | Zipkin sample rate (default: 1.0, use 0.1 for prod) | No |
@@ -155,9 +158,9 @@ curl http://localhost:19090/-/healthy   # Prometheus
 ### Docker image
 
 The Dockerfile uses a 3-stage build:
-1. **Build** -- Maven compile + package (Alpine JDK 17)
+1. **Build** -- Maven compile + package (Temurin JDK 21)
 2. **Layers** -- Extract Spring Boot layered JAR for optimal caching
-3. **Runtime** -- Minimal Alpine JRE 17, non-root user (UID 1000), `apk upgrade` for OS-level CVE patches
+3. **Runtime** -- Temurin JRE 21 Jammy, non-root user (UID 1000), `apt-get upgrade` for OS-level CVE patches
 
 ```bash
 # Build standalone
@@ -166,6 +169,7 @@ docker build -t payment-api .
 # Run with environment variables
 docker run -p 8080:8080 \
   -e JWT_SECRET=... \
+  -e WEBHOOK_ENCRYPTION_KEY=... \
   -e DB_URL=jdbc:mysql://host:3306/payment_db \
   -e DB_USERNAME=... \
   -e DB_PASSWORD=... \
@@ -374,8 +378,8 @@ Configured via `CORS_ALLOWED_ORIGINS` environment variable. Applied to `/api/**`
 
 | Dependency | Version | Constraint reason |
 |---|---|---|
-| `springdoc-openapi` | 2.8.9 | DO NOT upgrade to 2.8.10-2.8.16 — `PatternParseException` regression |
-| `logstash-logback-encoder` | 8.x | DO NOT upgrade to 9.0 — requires Jackson 3, incompatible with Spring Boot 3.5.x |
+| `springdoc-openapi` | 2.8.17 | Current verified Spring Boot 3.5-compatible version |
+| `logstash-logback-encoder` | 9.0 | Uses Jackson 3; `tools.jackson.*` artifacts are pinned in dependency management |
 | `cucumber-*` | 7.22.1 | DO NOT upgrade beyond 7.22.x — Cucumber 7.23+ requires JUnit Platform 1.13 (`DiscoveryIssueReporter`); Spring Boot 3.5.x BOM ships JUnit Platform 1.12.x |
 | `spring-boot` | 3.5.x | DO NOT upgrade to 4.x milestone builds — they are not GA |
 
@@ -395,6 +399,9 @@ Key properties across profiles:
 |---|---|---|
 | `jwt.secret` | `${JWT_SECRET}` | HS512 key (min 64 bytes) -- no fallback in base profile |
 | `jwt.expiration` | 86400000 (24h) | Token validity in ms |
+| `app.seed.default-users` | `false` | Enables known local/test fixture users only when explicitly set |
+| `webhook.encryption.secret-key` | `${WEBHOOK_ENCRYPTION_KEY:}` | Base64-encoded 32-byte AES-GCM key for webhook bearer tokens |
+| `webhook.encryption.allow-dev-key` | `false` | Allows fixed dev key only in local/test profiles |
 | `cors.allowed-origins` | localhost:3000,8080 | Override via `CORS_ALLOWED_ORIGINS` |
 | `rate-limit.limit` | 100 | Requests per window |
 | `rate-limit.refreshPeriod` | 60000ms | Window duration |
@@ -422,6 +429,10 @@ Key properties across profiles:
 # Run all tests with coverage enforcement
 mvn verify
 
+# Run the local Postman smoke collection against a running local app
+npx -y newman run postman/payment-api-local.postman_collection.json \
+  -e postman/payment-api-local.postman_environment.json
+
 # Run tests only (skip coverage gate)
 mvn test
 
@@ -446,12 +457,12 @@ open target/cucumber-reports/cucumber.html
 | Controller slice | ~60 | `@WebMvcTest` + MockMvc | Auth, payment, admin, webhook controllers; validation, error mapping |
 | Integration | ~15 | `@SpringBootTest` + H2 | Full Spring context; DB constraints, caching, tracing |
 | End-to-end | ~15 | `TestRestTemplate` | HTTP round-trips, ownership isolation |
-| System (RestAssured) | ~87 | REST Assured 5.5.x | JSON Schema validation, SLA, RBAC, masking, idempotency, webhooks |
+| System (RestAssured) | ~87 | REST Assured 6.0.0 | JSON Schema validation, SLA, RBAC, masking, idempotency, webhooks |
 | BDD acceptance | 25 | **Cucumber-JVM 7.22** | Business narrative scenarios in Gherkin |
 
 ### REST Assured system tests
 
-The project uses [REST Assured](https://rest-assured.io/) 5.5.x for API-level system testing:
+The project uses [REST Assured](https://rest-assured.io/) 6.0.0 for API-level system testing:
 
 - **JSON Schema validation** — responses validated against schemas in `src/test/resources/schemas/`
   - `payment-response.json`, `error-response.json`, `login-response.json`, `admin-stats.json`, `user-profile-response.json`
@@ -692,7 +703,7 @@ payment-api/
     application-local.properties     # H2, no Redis, debug logging
     application-docker.properties    # MySQL, Redis, JSON logging
     application-test.properties      # Test-specific overrides
-    db/migration/                    # Flyway SQL migrations (V1–V11)
+    db/migration/                    # Flyway SQL migrations (V1-V14)
     logback-spring.xml               # Structured logging config
   src/test/
     java/.../bdd/                    # Cucumber-JVM infrastructure (CucumberIT, ScenarioContext, step defs)
@@ -700,6 +711,7 @@ payment-api/
     resources/schemas/               # JSON Schema files for REST Assured response validation
     # 693 tests total (unit, controller, integration, E2E, REST Assured, Cucumber BDD)
   .github/workflows/                 # CI, CD, security scan, Claude Code workflows
+  postman/                           # Local Postman/Newman smoke collection and environment
   helm/payment-api/                  # Helm chart for Kubernetes deployment
   Dockerfile                         # Multi-stage layered JAR build
   docker-compose.yml                 # Full local stack (app, MySQL, Redis, Prometheus, Grafana, Zipkin)

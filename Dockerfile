@@ -65,7 +65,7 @@ USER appuser
 
 EXPOSE 8080
 
-# Health check via Spring Boot Actuator (wget is pre-installed in Alpine)
+# Health check via Spring Boot Actuator (wget is installed above for Jammy)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider http://localhost:8080/actuator/health || exit 1
 

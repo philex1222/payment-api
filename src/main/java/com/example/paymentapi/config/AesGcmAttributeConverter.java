@@ -1,5 +1,6 @@
 package com.example.paymentapi.config;
 
+import jakarta.annotation.PostConstruct;
 import jakarta.persistence.AttributeConverter;
 import jakarta.persistence.Converter;
 import org.springframework.beans.factory.annotation.Value;
@@ -20,7 +21,8 @@ import java.util.Base64;
  * first 12 bytes of the base64-encoded ciphertext.
  *
  * <p>Configure via {@code webhook.encryption.secret-key} (base64-encoded 32-byte key).
- * If absent, a fixed dev-only key is used — never use the dev key in production.</p>
+ * Local/test profiles may opt into a fixed development key with
+ * {@code webhook.encryption.allow-dev-key=true}; production must provide a key.</p>
  */
 @Converter
 @Component
@@ -28,6 +30,7 @@ public class AesGcmAttributeConverter implements AttributeConverter<String, Stri
 
     private static final int GCM_IV_LENGTH = 12;
     private static final int GCM_TAG_LENGTH_BITS = 128;
+    private static final int AES_256_KEY_LENGTH_BYTES = 32;
     private static final String ALGORITHM = "AES/GCM/NoPadding";
 
     // Fixed 32-byte dev key (all zeros encoded as base64). NEVER use in production.
@@ -35,6 +38,16 @@ public class AesGcmAttributeConverter implements AttributeConverter<String, Stri
 
     @Value("${webhook.encryption.secret-key:}")
     private String secretKeyBase64;
+
+    @Value("${webhook.encryption.allow-dev-key:false}")
+    private boolean allowDevKey;
+
+    private volatile SecretKey resolvedKey;
+
+    @PostConstruct
+    void init() {
+        this.resolvedKey = buildKey();
+    }
 
     @Override
     public String convertToDatabaseColumn(String plaintext) {
@@ -72,9 +85,36 @@ public class AesGcmAttributeConverter implements AttributeConverter<String, Stri
     }
 
     private SecretKey resolveKey() {
-        String keyStr = (secretKeyBase64 != null && !secretKeyBase64.isBlank())
-                ? secretKeyBase64 : DEV_KEY_BASE64;
-        byte[] keyBytes = Base64.getDecoder().decode(keyStr);
+        SecretKey key = resolvedKey;
+        if (key == null) {
+            key = buildKey();
+            resolvedKey = key;
+        }
+        return key;
+    }
+
+    private SecretKey buildKey() {
+        String keyStr;
+        if (secretKeyBase64 != null && !secretKeyBase64.isBlank()) {
+            keyStr = secretKeyBase64;
+        } else if (allowDevKey) {
+            keyStr = DEV_KEY_BASE64;
+        } else {
+            throw new IllegalStateException(
+                    "webhook.encryption.secret-key must be set to a base64-encoded 32-byte key");
+        }
+
+        byte[] keyBytes;
+        try {
+            keyBytes = Base64.getDecoder().decode(keyStr);
+        } catch (IllegalArgumentException ex) {
+            throw new IllegalStateException(
+                    "webhook.encryption.secret-key must be valid base64", ex);
+        }
+        if (keyBytes.length != AES_256_KEY_LENGTH_BYTES) {
+            throw new IllegalStateException(
+                    "webhook.encryption.secret-key must decode to exactly 32 bytes");
+        }
         return new SecretKeySpec(keyBytes, "AES");
     }
 }

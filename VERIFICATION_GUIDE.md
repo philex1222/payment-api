@@ -21,8 +21,8 @@ This comprehensive guide provides step-by-step instructions for verifying the Pa
 ### Required Tools
 - **curl** or **Postman** for API testing
 - **Docker** and **Docker Compose** for containerized deployment
-- **Java 17** for local development
-- **Maven 3.8+** for building
+- **Java 21** for local development
+- **Maven 3.9+** for building
 
 ### Environment Variables (for Docker)
 ```bash
@@ -31,6 +31,7 @@ SPRING_DATASOURCE_USERNAME=root
 SPRING_DATASOURCE_PASSWORD=password
 SPRING_REDIS_HOST=redis
 JWT_SECRET=your-super-secret-jwt-key-that-should-be-at-least-256-bits-long
+WEBHOOK_ENCRYPTION_KEY=base64-encoded-32-byte-key-from-openssl-rand-base64-32
 ```
 
 ---
@@ -105,7 +106,7 @@ Open in browser: `http://localhost:8080/swagger-ui/`
 
 ### 1. Successful Login
 ```bash
-curl -X POST http://localhost:8080/api/auth/login \
+curl -X POST http://localhost:8080/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{
     "username": "admin",
@@ -127,7 +128,7 @@ export TOKEN="eyJhbGciOiJIUzUxMiJ9..."
 
 ### 2. Invalid Password
 ```bash
-curl -X POST http://localhost:8080/api/auth/login \
+curl -X POST http://localhost:8080/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{
     "username": "admin",
@@ -145,7 +146,7 @@ curl -X POST http://localhost:8080/api/auth/login \
 
 ### 3. Non-existent User
 ```bash
-curl -X POST http://localhost:8080/api/auth/login \
+curl -X POST http://localhost:8080/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{
     "username": "nonexistent",
@@ -552,7 +553,7 @@ docker exec payment-api curl -f http://localhost:8080/actuator/health
 ### 6. Test API Through Docker
 ```bash
 # Login
-curl -X POST http://localhost:8080/api/auth/login \
+curl -X POST http://localhost:8080/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username": "admin", "password": "password"}'
 
