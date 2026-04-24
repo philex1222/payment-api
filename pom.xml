@@ -58,18 +58,17 @@
         -->
         <httpclient5.version>5.6</httpclient5.version>
         <!--
-          Temporal Java SDK. Pinned to 1.30.1 (latest GA as of 2026-04-17) so we pull in
-          protobuf-java-util 3.25.7 (CVE-2024-7254 fix ≥ 3.25.5) and grpc 1.58.x
-          (CVE-2023-32731 fix ≥ 1.54.2). grpc-netty-shaded is further bumped to 1.75.0
-          via grpc.version below for CVE-2025-55163.
+          Temporal Java SDK used by workflow, client, worker, and test integrations.
+          Keep temporal-sdk and temporal-testing aligned through this single property;
+          grpc.version below controls the grpc-* artifacts through the direct BOM import.
         -->
         <temporal.version>1.34.0</temporal.version>
         <!--
-          Override grpc-bom ahead of Temporal's transitive import (1.58.1) to fix
-          CVE-2025-55163 — Netty MadeYouReset HTTP/2 DDoS, fixed in grpc-java 1.75.0.
+          Override grpc-bom ahead of Temporal's transitive dependency graph to retain
+          CVE-2025-55163 coverage and keep grpc-* artifacts on a version-locked stack.
           Imported as a BOM below in dependencyManagement; direct depMgmt wins over
           transitive, so all grpc-* jars (netty-shaded, api, stub, services, protobuf,
-          core, context, inprocess) move together to a version-locked 1.75.x stack.
+          core, context, inprocess) move together through grpc.version.
         -->
         <grpc.version>1.80.0</grpc.version>
     </properties>
@@ -77,9 +76,9 @@
     <dependencyManagement>
         <dependencies>
             <!--
-              grpc-bom override — MUST come before Temporal's transitive import so our
-              1.75.0 version wins over the 1.58.1 shipped by temporal-serviceclient:1.30.1.
-              Addresses CVE-2025-55163 (Netty MadeYouReset HTTP/2 DDoS, fixed 1.75.0).
+              grpc-bom override: direct dependencyManagement wins over Temporal's transitive
+              grpc dependencies, so grpc-* artifacts resolve through ${grpc.version}.
+              Kept for CVE-2025-55163 coverage and to avoid Temporal transitive grpc drift.
             -->
             <dependency>
                 <groupId>io.grpc</groupId>
