@@ -63,7 +63,7 @@
           (CVE-2023-32731 fix ≥ 1.54.2). grpc-netty-shaded is further bumped to 1.75.0
           via grpc.version below for CVE-2025-55163.
         -->
-        <temporal.version>1.30.1</temporal.version>
+        <temporal.version>1.34.0</temporal.version>
         <!--
           Override grpc-bom ahead of Temporal's transitive import (1.58.1) to fix
           CVE-2025-55163 — Netty MadeYouReset HTTP/2 DDoS, fixed in grpc-java 1.75.0.
