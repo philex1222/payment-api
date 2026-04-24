@@ -71,7 +71,7 @@
           transitive, so all grpc-* jars (netty-shaded, api, stub, services, protobuf,
           core, context, inprocess) move together to a version-locked 1.75.x stack.
         -->
-        <grpc.version>1.75.0</grpc.version>
+        <grpc.version>1.80.0</grpc.version>
     </properties>
 
     <dependencyManagement>
