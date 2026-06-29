@@ -28,7 +28,7 @@
           present in 1.12.x, causing a NoClassDefFoundError at test discovery time.
           Do NOT upgrade beyond 7.22.1 until Spring Boot upgrades JUnit Platform to 1.13+.
         -->
-        <cucumber.version>7.22.1</cucumber.version>
+        <cucumber.version>7.34.4</cucumber.version>
         <resilience4j.version>2.4.0</resilience4j.version>
         <!--
           Keep Tomcat pinned explicitly for security-review visibility. The
