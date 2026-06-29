@@ -73,7 +73,7 @@
           transitive, so all grpc-* jars (netty-shaded, api, stub, services, protobuf,
           core, context, inprocess) move together through grpc.version.
         -->
-        <grpc.version>1.80.0</grpc.version>
+        <grpc.version>1.82.1</grpc.version>
     </properties>
 
     <dependencyManagement>
