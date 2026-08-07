@@ -6,7 +6,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.5.14</version>
+        <version>3.5.16</version>
         <relativePath/> <!-- lookup parent from repository -->
     </parent>
     <groupId>com.example</groupId>
@@ -34,7 +34,25 @@
           Keep Tomcat pinned explicitly for security-review visibility. The
           Spring Boot BOM may already manage this patch level, but the property
           makes future vulnerability-driven updates intentional in this POM.
-          10.1.54 fixes all HIGH CVEs found by Trivy as of 2026-04-15:
+
+          WARNING: this pin OVERRIDES the BOM in both directions. Holding it at
+          10.1.54 while spring-boot-dependencies:3.5.16 had already moved to
+          10.1.55 is what kept three CRITICAL CVEs in the image and red-lit the
+          CI Trivy gate. When bumping the Spring Boot parent, re-check this
+          property against the BOM's tomcat.version — a stale pin here is
+          silent.
+
+          10.1.55 fixes all CRITICAL/HIGH CVEs found by Trivy as of 2026-08-07:
+            CVE-2026-41293 (fixed 10.1.55) CRITICAL — HTTP/2 request headers not validated
+            CVE-2026-43512 (fixed 10.1.55) CRITICAL — auth bypass via digest authentication
+            CVE-2026-43515 (fixed 10.1.55) CRITICAL — improper authorization security bypass
+            CVE-2026-41284 (fixed 10.1.55) HIGH — DoS via uncontrolled resource consumption
+            CVE-2026-42498 (fixed 10.1.55) HIGH — info disclosure via HTTP authentication
+            CVE-2026-43513 (fixed 10.1.55) HIGH — improper handling of case sensitivity
+          10.1.56/10.1.57 add Moderate/Low fixes (CVE-2026-55956, CVE-2026-59083
+          and others); taking 10.1.57 as the latest 10.1.x patch.
+
+          Superseded, retained for history — 10.1.54 fixed the HIGH CVEs found 2026-04-15:
             CVE-2025-48988 (fixed 10.1.42) — multipart DoS
             CVE-2025-52520 (fixed 10.1.43) — integer overflow multipart
             CVE-2025-53506 (fixed 10.1.43) — HTTP/2 resource exhaustion
@@ -47,7 +65,23 @@
           Keeping the explicit property so any future Trivy gate failure makes
           the intended version immediately visible in pom.xml.
         -->
-        <tomcat.version>10.1.54</tomcat.version>
+        <tomcat.version>10.1.57</tomcat.version>
+        <!--
+          Netty arrives transitively through spring-boot-starter-data-redis ->
+          lettuce-core, NOT through Temporal or grpc (grpc uses grpc-netty-shaded).
+          The Spring Boot 3.5.16 BOM manages netty.version at 4.1.135.Final, which
+          is one patch short of the netty-codec fix, so it is overridden here.
+          4.1.136 fixes the HIGH CVE that 4.1.135 does not:
+            CVE-2026-59901 (fixed 4.1.136) HIGH — infinite loop in netty-codec
+          Already covered by the BOM's 4.1.135, listed for review visibility:
+            CVE-2026-44249 (fixed 4.1.135) HIGH — IPv6 subnet rule bypass
+            CVE-2026-45416 (fixed 4.1.135) HIGH — DoS via eager buffer allocation
+            CVE-2026-50010 (fixed 4.1.135) HIGH — improper trust manager handling
+            CVE-2026-42583 (fixed 4.1.133) HIGH — netty-codec decompression
+          Taking 4.1.137.Final as the latest 4.1.x patch. Same minor line as the
+          BOM — API-compatible. Drop this property once the BOM reaches 4.1.136+.
+        -->
+        <netty.version>4.1.137.Final</netty.version>
         <!--
           Override Flyway within the 11.x line for latest bug fixes while
           staying on the same major version.
@@ -112,21 +146,36 @@
             <!--
               Pin Jackson 3.x (tools.jackson) ahead of logstash-logback-encoder:9.0
               which pulls in tools.jackson.core:jackson-databind:3.0.1.
-              3.1.1 fixes all HIGH CVEs found by Trivy as of 2026-04-15:
+              This pin is independent of the Spring Boot BOM, which manages the
+              Jackson 2.x line (com.fasterxml.jackson) via jackson-bom — both
+              major versions are present in the shaded jar and Trivy flags each
+              separately, so both must be kept current.
+
+              3.1.4 fixes all HIGH CVEs found by Trivy as of 2026-08-07:
+                CVE-2026-54512 (fixed 3.1.4) — PolymorphicTypeValidator bypass via
+                                               generic type parameters (arbitrary code execution)
+                CVE-2026-54513 (fixed 3.1.4) — array subtype allowlist bypass in
+                                               BasicPolymorphicTypeValidator
+                GHSA-r7wm-3cxj-wff9 (fixed 3.1.4) — async parser maxNumberLength
+                                               bypass via chunked digit accumulation
+              Taking 3.1.5 as the latest 3.1.x patch. Deliberately NOT 3.2.x
+              (Dependabot PRs #58/#59 propose 3.2.1): 3.1.5 clears every advisory
+              above while staying on the current minor line.
+
+              Superseded, retained for history — 3.1.1 fixed the HIGH CVEs found 2026-04-15:
                 CVE-2026-29062  (fixed 3.1.0) — DoS via excessive JSON nesting
                 GHSA-2m67-wjpj-xhg9 (fixed 3.1.1) — document length constraint bypass
-              3.1.2 is a patch release with additional bug fixes; upgrading from 3.1.1.
               jackson-databind and jackson-core must be co-versioned.
             -->
             <dependency>
                 <groupId>tools.jackson.core</groupId>
                 <artifactId>jackson-databind</artifactId>
-                <version>3.1.2</version>
+                <version>3.1.5</version>
             </dependency>
             <dependency>
                 <groupId>tools.jackson.core</groupId>
                 <artifactId>jackson-core</artifactId>
-                <version>3.1.2</version>
+                <version>3.1.5</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
