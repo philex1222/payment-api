@@ -257,18 +257,41 @@ jobs:
           no-cache: ${{ github.event_name == 'schedule' }}
           load: true
 
-      # Gate: fail if there are CRITICAL or HIGH CVEs that have a fix available.
-      # ignore-unfixed=true skips CVEs with no patch yet (nothing actionable).
-      # When this fails, update the base image or vulnerable dependency.
-      - name: Scan image with Trivy (CRITICAL & HIGH CVEs)
+      # Two Trivy passes, deliberately separated — do not merge them back.
+      #
+      # trivy-action forces SARIF output to contain ALL severities regardless of
+      # the `severity` input (unless limit-severities-for-sarif is set), while
+      # `exit-code` still reflects everything the scan found. A single step with
+      # format=sarif + severity=CRITICAL,HIGH + exit-code=1 therefore fails the
+      # build on ANY finding, MEDIUM and LOW included, despite its name. That is
+      # what kept this job red after every CRITICAL/HIGH had already been fixed:
+      # three MEDIUM jackson-databind CVEs were failing a "CRITICAL & HIGH" gate.
+      #
+      # Pass 1 reports (never fails) so the Security tab keeps full severity
+      # coverage. Pass 2 gates on CRITICAL/HIGH only.
+
+      # Pass 1 — report only. exit-code 0: this step must never fail the build.
+      - name: Scan image with Trivy (SARIF report, all severities)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: payment-api:${{ github.sha }}
           format: sarif
           output: trivy-results.sarif
+          exit-code: "0"          # report-only; the gate below decides pass/fail
+          ignore-unfixed: "true"  # skip CVEs with no available fix
+
+      # Pass 2 — the actual gate. Table format prints the offending CVEs into the
+      # log, which the SARIF-format step could not do; that is why the previous
+      # failures showed an exit code and no vulnerability list.
+      - name: Gate build on fixable CRITICAL & HIGH CVEs
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: payment-api:${{ github.sha }}
+          format: table
           severity: CRITICAL,HIGH
           exit-code: "1"          # fail on fixable CRITICAL/HIGH CVEs
           ignore-unfixed: "true"  # skip CVEs with no available fix
+          skip-setup-trivy: "true"  # reuse the binary and DB from pass 1
 
       - name: Upload Trivy SARIF to GitHub Security tab
         uses: github/codeql-action/upload-sarif@f94817b9f0deeb3871261446912ae8f854d1b675 # codeql-bundle-v2.25.1
@@ -280,10 +303,36 @@ jobs:
       - name: Summarise Trivy container scan findings
         if: always()
         run: |
+          # The SARIF holds ALL severities (see the two-pass note above), so a bare
+          # count here previously mislabelled every finding as CRITICAL+HIGH.
+          # Break it down by the severity tag on each result's rule.
           if [ -f trivy-results.sarif ]; then
-            TOTAL=$(jq '[.runs[].results[]] | length' trivy-results.sarif 2>/dev/null || echo "?")
-            echo "**Trivy container findings (CRITICAL+HIGH, fixable only): ${TOTAL}**" \
-              >> "$GITHUB_STEP_SUMMARY"
+            python3 - trivy-results.sarif >> "$GITHUB_STEP_SUMMARY" <<'PY'
+          import collections, json, sys
+
+          LEVELS = ("CRITICAL", "HIGH", "MEDIUM", "LOW", "UNKNOWN")
+          counts = collections.Counter()
+          try:
+              with open(sys.argv[1], encoding="utf-8") as fh:
+                  data = json.load(fh)
+              for run in data.get("runs", []):
+                  rules = {r.get("id"): r for r in run.get("tool", {}).get("driver", {}).get("rules", [])}
+                  for result in run.get("results", []):
+                      tags = rules.get(result.get("ruleId"), {}).get("properties", {}).get("tags", [])
+                      counts[next((t for t in tags if t in LEVELS), "UNKNOWN")] += 1
+          except Exception as exc:  # never fail the build on a reporting step
+              print(f"Could not parse trivy-results.sarif: {exc}")
+              raise SystemExit(0)
+
+          print("### Trivy container scan (fixable only)")
+          print()
+          print("| Severity | Findings |")
+          print("| --- | --- |")
+          for level in LEVELS:
+              print(f"| {level} | {counts.get(level, 0)} |")
+          print()
+          print("Gate fails on CRITICAL/HIGH only.")
+          PY
           fi
 
       - name: Upload Trivy SARIF as artifact
